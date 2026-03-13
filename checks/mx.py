@@ -19,7 +19,7 @@ class MXCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_mx",
             details={"records": []},
          )
@@ -31,7 +31,7 @@ class MXCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=2,
+            score=1,
             reason="null_mx",
             details={"records": records},
          )
@@ -41,7 +41,7 @@ class MXCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=2,
+            score=1,
             reason="ip_literal_mx",
             details={"records": records},
          )
@@ -50,7 +50,7 @@ class MXCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=1,
+            score=2,
             reason="single_mx",
             details={"records": records},
          )
@@ -58,7 +58,7 @@ class MXCheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=0,
+         score=3,
          reason="mx_ok",
          details={"records": records},
       )

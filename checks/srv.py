@@ -30,7 +30,7 @@ class SRVCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_mail_srv",
             details={"srv_records": {}},
          )
@@ -39,7 +39,7 @@ class SRVCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=1,
+            score=2,
             reason="partial_mail_srv",
             details={"srv_records": found, "missing": [s for s in MAIL_SRV_NAMES if s not in found]},
          )
@@ -47,7 +47,7 @@ class SRVCheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=0,
+         score=3,
          reason="mail_srv_ok",
          details={"srv_records": found},
       )

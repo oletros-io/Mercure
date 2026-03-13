@@ -17,7 +17,7 @@ class TLSACheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=0,
+            score=3,
             reason="tlsa_present",
             details={"fqdn": fqdn, "records": records},
          )
@@ -26,7 +26,7 @@ class TLSACheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=3,
+         score=0,
          reason="no_tlsa",
          details={"fqdn": fqdn, "records": []},
       )

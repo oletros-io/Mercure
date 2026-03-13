@@ -169,7 +169,7 @@ def brute_selectors(domain: str, extra: List[str]) -> List[str]:
 def evaluate_dkim(results: List[Dict]) -> Dict:
    present = [r for r in results if r.get("present")]
    if not present:
-      return {"score": 3, "reason": "no_dkim", "details": []}
+      return {"score": 0, "reason": "no_dkim", "details": []}
 
    weak = sum(1 for r in present if r.get("weak_key"))
    risky = sum(1 for r in present if r.get("risky_tags"))
@@ -177,12 +177,12 @@ def evaluate_dkim(results: List[Dict]) -> Dict:
    details = present
 
    if weak and (weak >= 1) and (weak < len(present) + 1):
-      return {"score": 1, "reason": "weak_key_present", "details": details}
+      return {"score": 2, "reason": "weak_key_present", "details": details}
 
    if risky or guess:
-      return {"score": 2, "reason": "risky_or_guessable_selector", "details": details}
+      return {"score": 1, "reason": "risky_or_guessable_selector", "details": details}
 
-   return {"score": 0, "reason": "strong_dkim", "details": details}
+   return {"score": 3, "reason": "strong_dkim", "details": details}
 
 
 class DKIMCheck(BaseCheck):

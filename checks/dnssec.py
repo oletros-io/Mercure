@@ -20,7 +20,7 @@ class DNSSECCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=0,
+            score=3,
             reason="dnssec_valid",
             details={"ds": ds_records, "dnskey": dnskey_records},
          )
@@ -30,7 +30,7 @@ class DNSSECCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=1,
+            score=2,
             reason="dnskey_no_ds",
             details={"ds": ds_records, "dnskey": dnskey_records},
          )
@@ -40,7 +40,7 @@ class DNSSECCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=2,
+            score=1,
             reason="ds_no_dnskey",
             details={"ds": ds_records, "dnskey": dnskey_records},
          )
@@ -48,7 +48,7 @@ class DNSSECCheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=3,
+         score=0,
          reason="no_dnssec",
          details={"ds": [], "dnskey": []},
       )

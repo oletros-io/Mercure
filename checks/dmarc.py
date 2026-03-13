@@ -19,7 +19,7 @@ def get_dmarc(domain: str) -> Optional[str]:
 
 def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
    if not dmarc_txt:
-      return {"score": 3, "policy": "missing", "reason": "no_dmarc", "value": None}
+      return {"score": 0, "policy": "missing", "reason": "no_dmarc", "value": None}
 
    parts = {
       p.split("=")[0].strip(): "=".join(p.split("=")[1:]).strip()
@@ -34,16 +34,16 @@ def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
 
    if policy == "reject":
       if pct < 100:
-         return {"score": 1, "reason": "reject_partial_pct", **base}
-      return {"score": 0, "reason": "reject_full", **base}
+         return {"score": 2, "reason": "reject_partial_pct", **base}
+      return {"score": 3, "reason": "reject_full", **base}
 
    if policy == "quarantine":
-      return {"score": 1, "reason": "quarantine", **base}
+      return {"score": 2, "reason": "quarantine", **base}
 
    if policy == "none":
-      return {"score": 2, "reason": "none_policy", **base}
+      return {"score": 1, "reason": "none_policy", **base}
 
-   return {"score": 2, "reason": "unknown_policy", **base}
+   return {"score": 1, "reason": "unknown_policy", **base}
 
 
 class DMARCCheck(BaseCheck):

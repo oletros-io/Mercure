@@ -24,7 +24,7 @@ class NSCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_ns",
             details={"nameservers": []},
          )
@@ -33,7 +33,7 @@ class NSCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=2,
+            score=1,
             reason="single_ns",
             details={"nameservers": records},
          )
@@ -44,7 +44,7 @@ class NSCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=1,
+            score=2,
             reason="same_provider_ns",
             details={"nameservers": records, "providers": list(providers)},
          )
@@ -52,7 +52,7 @@ class NSCheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=0,
+         score=3,
          reason="ns_ok",
          details={"nameservers": records, "providers": list(providers)},
       )

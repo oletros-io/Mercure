@@ -17,7 +17,7 @@ class PTRCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_a_record",
             details={"a_records": [], "ptr_results": {}},
          )
@@ -34,7 +34,7 @@ class PTRCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_ptr",
             details={"a_records": a_records, "ptr_results": ptr_results},
          )
@@ -43,7 +43,7 @@ class PTRCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=2,
+            score=1,
             reason="partial_ptr",
             details={"a_records": a_records, "ptr_results": ptr_results, "missing": ips_without_ptr},
          )
@@ -58,7 +58,7 @@ class PTRCheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=0,
+            score=3,
             reason="ptr_match",
             details={"a_records": a_records, "ptr_results": ptr_results},
          )
@@ -66,7 +66,7 @@ class PTRCheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=1,
+         score=2,
          reason="ptr_no_match",
          details={"a_records": a_records, "ptr_results": ptr_results},
       )

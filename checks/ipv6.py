@@ -16,7 +16,7 @@ class IPv6Check(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=0,
+            score=3,
             reason="ipv6_present",
             details={"addresses": records},
          )
@@ -25,7 +25,7 @@ class IPv6Check(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=3,
+         score=0,
          reason="no_ipv6",
          details={"addresses": []},
       )

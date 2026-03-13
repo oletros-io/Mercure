@@ -27,10 +27,10 @@ WEIGHTS = {
 }
 
 SCORE_STYLES = {
-   0: "green",
-   1: "yellow",
-   2: "orange1",
-   3: "red",
+   0: "red",
+   1: "orange1",
+   2: "yellow",
+   3: "green",
 }
 
 
@@ -50,10 +50,8 @@ def compute_global_score(results: List[CheckResult]) -> float:
 
 
 def global_score_style(score: float) -> str:
-   if score <= 2.0:
+   if score >= 7.0:
       return "green"
-   if score <= 5.0:
-      return "yellow"
-   if score <= 7.0:
+   if score >= 3.0:
       return "orange1"
    return "red"

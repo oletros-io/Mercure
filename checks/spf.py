@@ -18,26 +18,26 @@ def get_spf(domain: str) -> Optional[str]:
 
 def evaluate_spf(spf_txt: Optional[str]) -> Dict:
    if not spf_txt:
-      return {"score": 3, "reason": "no_spf", "value": None}
+      return {"score": 0, "reason": "no_spf", "value": None}
 
    spf = spf_txt.lower()
 
    if "+all" in spf or " all +all" in spf:
-      return {"score": 3, "reason": "allow_all_plus", "value": spf_txt}
+      return {"score": 0, "reason": "allow_all_plus", "value": spf_txt}
 
    if "include:all" in spf:
-      return {"score": 2, "reason": "include_all", "value": spf_txt}
+      return {"score": 1, "reason": "include_all", "value": spf_txt}
 
    if re.search(r"(^|\s)-all\b", spf):
-      return {"score": 0, "reason": "hard_fail", "value": spf_txt}
+      return {"score": 3, "reason": "hard_fail", "value": spf_txt}
 
    if re.search(r"(^|\s)~all\b", spf):
-      return {"score": 1, "reason": "soft_fail", "value": spf_txt}
+      return {"score": 2, "reason": "soft_fail", "value": spf_txt}
 
    if re.search(r"(^|\s)\?all\b", spf):
-      return {"score": 2, "reason": "neutral_all", "value": spf_txt}
+      return {"score": 1, "reason": "neutral_all", "value": spf_txt}
 
-   return {"score": 2, "reason": "unknown_policy", "value": spf_txt}
+   return {"score": 1, "reason": "unknown_policy", "value": spf_txt}
 
 
 class SPFCheck(BaseCheck):

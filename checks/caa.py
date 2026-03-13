@@ -17,7 +17,7 @@ class CAACheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=3,
+            score=0,
             reason="no_caa",
             details={"records": []},
          )
@@ -37,7 +37,7 @@ class CAACheck(BaseCheck):
             return CheckResult(
                name=self.name,
                label=self.label,
-               score=0,
+               score=3,
                reason="caa_restricted",
                details={"records": records, "has_issuewild": has_issuewild, "has_iodef": has_iodef},
             )
@@ -45,7 +45,7 @@ class CAACheck(BaseCheck):
          return CheckResult(
             name=self.name,
             label=self.label,
-            score=1,
+            score=2,
             reason="caa_permissive_issue",
             details={"records": records},
          )
@@ -53,7 +53,7 @@ class CAACheck(BaseCheck):
       return CheckResult(
          name=self.name,
          label=self.label,
-         score=2,
+         score=1,
          reason="caa_no_issue_tag",
          details={"records": records},
       )
