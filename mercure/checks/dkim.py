@@ -3,10 +3,10 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Iterable
 
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_txt, query_cname
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_txt, query_cname
+from .. import logger
 
 BASE_SELECTORS = [
    "default", "dkim", "dkim1", "dkim2", "selector", "selector1", "selector2", "s1", "s2", "s3", "s4", "smtp", "smtp1", "smtp2", "smtp3",
@@ -171,24 +171,26 @@ def evaluate_dkim(results: List[Dict]) -> Dict:
    if not present:
       return {"score": 0, "reason": "no_dkim", "details": []}
 
-   weak = sum(1 for r in present if r.get("weak_key"))
-   risky = sum(1 for r in present if r.get("risky_tags"))
-   guess = sum(1 for r in present if r.get("guessable_selector"))
-   details = present
+   has_l_tag = any("l" in r.get("risky_tags", []) for r in present)
+   has_test_mode = any("t" in r.get("risky_tags", []) for r in present)
+   weak = any(r.get("weak_key") for r in present)
+   all_guessable = all(r.get("guessable_selector") for r in present)
 
-   if weak and (weak >= 1) and (weak < len(present) + 1):
-      return {"score": 2, "reason": "weak_key_present", "details": details}
+   if has_l_tag or weak:
+      reason = "weak_key" if weak else "dangerous_l_tag"
+      return {"score": 1, "reason": reason, "details": present}
 
-   if risky or guess:
-      return {"score": 1, "reason": "risky_or_guessable_selector", "details": details}
+   if has_test_mode or all_guessable:
+      reason = "test_mode" if has_test_mode else "all_selectors_guessable"
+      return {"score": 2, "reason": reason, "details": present}
 
-   return {"score": 3, "reason": "strong_dkim", "details": details}
+   return {"score": 3, "reason": "strong_dkim", "details": present}
 
 
 class DKIMCheck(BaseCheck):
    name = "dkim"
    label = "DKIM"
-   weight = 2.5
+   weight = 3.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       bruteforce = kwargs.get("dkim_bruteforce", True)

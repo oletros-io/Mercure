@@ -1,7 +1,7 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_srv
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_srv
+from .. import logger
 
 
 MAIL_SRV_NAMES = [

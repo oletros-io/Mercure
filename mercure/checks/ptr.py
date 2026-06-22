@@ -1,7 +1,7 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_a, query_ptr
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_a, query_ptr
+from .. import logger
 
 
 class PTRCheck(BaseCheck):

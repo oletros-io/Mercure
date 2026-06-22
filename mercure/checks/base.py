@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from scoring import CheckResult
+from ..scoring import CheckResult
 
 
 class BaseCheck(ABC):

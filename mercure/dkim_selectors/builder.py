@@ -8,7 +8,7 @@ import secrets
 import pathlib
 from typing import List, Set, Iterable
 
-import logger
+from .. import logger
 
 VALID_CHARS = set(string.ascii_lowercase + string.digits + "-")
 LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")

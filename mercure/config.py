@@ -16,6 +16,7 @@ class Config:
    default_threads: int = int(os.getenv("DEFAULT_THREADS", "16"))
    selector_threads: int = int(os.getenv("SELECTOR_THREADS", "16"))
    dkim_wordlist_path: str = os.getenv("DKIM_WORDLIST_PATH", "resources/selectors.txt")
+   smtp_timeout: float = float(os.getenv("SMTP_TIMEOUT", "10.0"))
    log_dir: Path = field(default_factory=lambda: Path(os.getenv("LOG_DIR", "log")))
 
 

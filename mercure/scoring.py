@@ -13,17 +13,18 @@ class CheckResult:
 
 
 WEIGHTS = {
+   "dmarc": 3.5,
    "spf": 3.0,
-   "dkim": 2.5,
-   "dmarc": 3.0,
-   "dnssec": 2.0,
-   "caa": 1.5,
+   "dkim": 3.0,
+   "dnssec": 2.5,
+   "ghost": 2.5,
+   "caa": 2.0,
+   "tlsa": 1.5,
    "mx": 1.5,
    "ns": 1.5,
    "ptr": 1.0,
-   "ipv6": 0.5,
    "srv": 0.5,
-   "tlsa": 1.0,
+   "ipv6": 0.5,
 }
 
 SCORE_STYLES = {
@@ -32,6 +33,10 @@ SCORE_STYLES = {
    2: "yellow",
    3: "green",
 }
+
+
+def score_to_ten(raw: int) -> int:
+   return round(raw * 10 / 3)
 
 
 def compute_global_score(results: List[CheckResult]) -> float:
@@ -52,6 +57,6 @@ def compute_global_score(results: List[CheckResult]) -> float:
 def global_score_style(score: float) -> str:
    if score >= 7.0:
       return "green"
-   if score >= 3.0:
+   if score >= 4.0:
       return "orange1"
    return "red"

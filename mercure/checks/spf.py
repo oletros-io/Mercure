@@ -1,10 +1,10 @@
 import re
 from typing import Dict, Optional
 
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_txt
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_txt
+from .. import logger
 
 
 def get_spf(domain: str) -> Optional[str]:
@@ -22,11 +22,11 @@ def evaluate_spf(spf_txt: Optional[str]) -> Dict:
 
    spf = spf_txt.lower()
 
-   if "+all" in spf or " all +all" in spf:
+   if "+all" in spf:
       return {"score": 0, "reason": "allow_all_plus", "value": spf_txt}
 
-   if "include:all" in spf:
-      return {"score": 1, "reason": "include_all", "value": spf_txt}
+   if "redirect=" in spf and not re.search(r"[-~?+]all\b", spf):
+      return {"score": 2, "reason": "redirect_no_all", "value": spf_txt}
 
    if re.search(r"(^|\s)-all\b", spf):
       return {"score": 3, "reason": "hard_fail", "value": spf_txt}

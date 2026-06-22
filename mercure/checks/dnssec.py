@@ -1,13 +1,13 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_ds, query_dnskey
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_ds, query_dnskey
+from .. import logger
 
 
 class DNSSECCheck(BaseCheck):
    name = "dnssec"
    label = "DNSSEC"
-   weight = 2.0
+   weight = 2.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       ds_records = query_ds(domain)

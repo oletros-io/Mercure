@@ -3,8 +3,8 @@ from typing import List
 import dns.resolver
 import dns.reversename
 
-from config import config
-import logger
+from .config import config
+from . import logger
 
 
 def _resolve(name: str, rdtype: str, timeout: float = None) -> list:

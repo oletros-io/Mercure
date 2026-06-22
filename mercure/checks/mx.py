@@ -1,9 +1,9 @@
 import re
 
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_mx
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_mx
+from .. import logger
 
 
 class MXCheck(BaseCheck):

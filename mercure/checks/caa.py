@@ -1,13 +1,13 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_caa
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_caa
+from .. import logger
 
 
 class CAACheck(BaseCheck):
    name = "caa"
    label = "CAA"
-   weight = 1.5
+   weight = 2.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       records = query_caa(domain)
@@ -23,7 +23,6 @@ class CAACheck(BaseCheck):
          )
 
       tags = [r["tag"].lower() for r in records]
-      values = [r["value"] for r in records]
 
       has_issue = "issue" in tags
       has_issuewild = "issuewild" in tags

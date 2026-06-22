@@ -1,13 +1,13 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_tlsa
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_tlsa
+from .. import logger
 
 
 class TLSACheck(BaseCheck):
    name = "tlsa"
    label = "TLSA"
-   weight = 1.0
+   weight = 1.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       fqdn = f"_25._tcp.{domain}"

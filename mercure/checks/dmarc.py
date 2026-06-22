@@ -1,10 +1,10 @@
 import re
 from typing import Dict, Optional
 
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_txt
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_txt
+from .. import logger
 
 
 def get_dmarc(domain: str) -> Optional[str]:
@@ -26,11 +26,12 @@ def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
       for p in re.split(r";\s*", dmarc_txt) if "=" in p
    }
    policy = parts.get("p", "").lower()
+   sp = parts.get("sp", "").lower()
    pct = int(parts.get("pct", "100")) if parts.get("pct") and parts.get("pct").isdigit() else 100
    rua = parts.get("rua", "")
    ruf = parts.get("ruf", "")
 
-   base = {"policy": policy, "pct": pct, "rua": rua, "ruf": ruf, "value": dmarc_txt}
+   base = {"policy": policy, "sp": sp, "pct": pct, "rua": rua, "ruf": ruf, "value": dmarc_txt}
 
    if policy == "reject":
       if pct < 100:
@@ -38,6 +39,8 @@ def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
       return {"score": 3, "reason": "reject_full", **base}
 
    if policy == "quarantine":
+      if pct < 100:
+         return {"score": 1, "reason": "quarantine_partial_pct", **base}
       return {"score": 2, "reason": "quarantine", **base}
 
    if policy == "none":
@@ -49,7 +52,7 @@ def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
 class DMARCCheck(BaseCheck):
    name = "dmarc"
    label = "DMARC"
-   weight = 3.0
+   weight = 3.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       dmarc_txt = get_dmarc(domain)
@@ -62,6 +65,7 @@ class DMARCCheck(BaseCheck):
          value=result.get("value"),
          details={
             "policy": result.get("policy"),
+            "sp": result.get("sp"),
             "pct": result.get("pct"),
             "rua": result.get("rua"),
             "ruf": result.get("ruf"),

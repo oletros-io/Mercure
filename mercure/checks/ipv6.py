@@ -1,7 +1,7 @@
-from checks.base import BaseCheck
-from scoring import CheckResult
-from dns_utils import query_aaaa
-import logger
+from .base import BaseCheck
+from ..scoring import CheckResult
+from ..dns_utils import query_aaaa
+from .. import logger
 
 
 class IPv6Check(BaseCheck):

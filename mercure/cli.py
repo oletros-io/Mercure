@@ -13,18 +13,18 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.box import DOUBLE
 
-import logger
-from config import config
-from checks import ALL_CHECKS, get_check_by_name
-from scoring import CheckResult, compute_global_score, global_score_style, SCORE_STYLES
+from . import logger
+from .config import config
+from .checks import ALL_CHECKS, get_check_by_name
+from .scoring import CheckResult, compute_global_score, global_score_style, SCORE_STYLES, score_to_ten
 
 console = Console()
 
 BANNER = r"""
 ███╗   ███╗███████╗██████╗  ██████╗██╗   ██╗██████╗ ███████╗
 ████╗ ████║██╔════╝██╔══██╗██╔════╝██║   ██║██╔══██╗██╔════╝
-██╔████╔██║█████╗  ██████╔╝██║     ██║   ██║██████╔╝█████╗  
-██║╚██╔╝██║██╔══╝  ██╔══██╗██║     ██║   ██║██╔══██╗██╔══╝  
+██╔████╔██║█████╗  ██████╔╝██║     ██║   ██║██████╔╝█████╗
+██║╚██╔╝██║██╔══╝  ██╔══██╗██║     ██║   ██║██╔══██╗██╔══╝
 ██║ ╚═╝ ██║███████╗██║  ██║╚██████╗╚██████╔╝██║  ██║███████╗
 ╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 """.strip("\n")
@@ -39,13 +39,13 @@ def rich_help():
    console.print(get_banner_panel())
    panel = Panel.fit(
       "[bold yellow]Usage:[/bold yellow]\n"
-      "  mercure -d example.com\n"
-      "  mercure -f domains.txt --format json --output results.json\n\n"
+      "  python mercure.py -d example.com\n"
+      "  python mercure.py -f domains.txt --format json --output results.json\n\n"
       "[bold yellow]Arguments:[/bold yellow]\n"
       "  -d, --domain              Domain to analyze\n"
       "  -f, --file                File with domains (one per line)\n"
       "  --checks NAMES            Comma-separated list of checks to run (default: all)\n"
-      "                            Available: spf,dkim,dmarc,caa,mx,ns,dnssec,ipv6,srv,ptr,tlsa\n"
+      "                            Available: spf,dkim,dmarc,caa,mx,ns,dnssec,ipv6,srv,ptr,tlsa,ghost\n"
       "  --dkim-wordlist PATH      Custom DKIM selector wordlist path\n"
       "  --no-bruteforce           Disable DKIM selector bruteforce\n"
       "  --aggressive              Enable aggressive DKIM selector bruteforce\n"
@@ -55,12 +55,14 @@ def rich_help():
       "  --format FMT              Output format: text|json|csv (default text)\n"
       "  --output PATH             Output file path (default stdout)\n"
       "  -h, --help                Show this help\n\n"
+      "[bold yellow]Scoring:[/bold yellow]\n"
+      "  10/10 = maximum security   0/10 = no security\n\n"
       "[bold yellow]Examples:[/bold yellow]\n"
-      "  mercure -d example.com\n"
-      "  mercure -d example.com --checks spf,dkim,dmarc --aggressive\n"
-      "  mercure -d example.com --format json --output report.json\n"
-      "  mercure -f domains.txt --threads 32 --format csv --output results.csv\n"
-      "  mercure -d example.com --checks caa,dnssec,mx,ns\n",
+      "  python mercure.py -d example.com\n"
+      "  python mercure.py -d example.com --checks spf,dkim,dmarc --aggressive\n"
+      "  python mercure.py -d example.com --format json --output report.json\n"
+      "  python mercure.py -f domains.txt --threads 32 --format csv --output results.csv\n"
+      "  python mercure.py -d example.com --checks caa,dnssec,mx,ns\n",
       title="Mercure - Domain Security Auditor",
       border_style="cyan",
    )
@@ -76,7 +78,8 @@ def analyze_domain(domain: str, checks: list, **kwargs) -> Dict:
       try:
          result = check.run(domain, **kwargs)
          results.append(result)
-         logger.info(f"  {result.label}: {result.score}/3 ({result.reason})")
+         displayed = score_to_ten(result.score)
+         logger.info(f"  {result.label}: {displayed}/10 ({result.reason})")
       except Exception as exc:
          logger.error(f"  {check.label} check failed: {exc}")
 
@@ -85,7 +88,15 @@ def analyze_domain(domain: str, checks: list, **kwargs) -> Dict:
    return {
       "domain": domain,
       "timestamp": datetime.now().isoformat(),
-      "checks": {r.name: {"score": r.score, "reason": r.reason, "value": r.value, "details": r.details} for r in results},
+      "checks": {
+         r.name: {
+            "score": score_to_ten(r.score),
+            "reason": r.reason,
+            "value": r.value,
+            "details": r.details,
+         }
+         for r in results
+      },
       "global_score": global_score,
    }
 
@@ -138,9 +149,16 @@ def print_scores_table(results: List[Dict]):
       for name in all_check_names:
          check_data = r.get("checks", {}).get(name)
          if check_data:
-            score = check_data["score"]
-            style = SCORE_STYLES.get(score, "white")
-            row.append(f"[{style}]{score}[/{style}]")
+            s10 = check_data["score"]
+            if s10 == 10:
+               style = "green"
+            elif s10 >= 7:
+               style = "yellow"
+            elif s10 >= 3:
+               style = "orange1"
+            else:
+               style = "red"
+            row.append(f"[{style}]{s10}[/{style}]")
          else:
             row.append("[grey50]-[/grey50]")
 
@@ -151,7 +169,7 @@ def print_scores_table(results: List[Dict]):
       table.add_row(*row)
 
    console.print()
-   console.print(Panel(table, title="Domain Security Scores", border_style="cyan"))
+   console.print(Panel(table, title="Domain Security Scores (10 = max security, 0 = none)", border_style="cyan"))
 
 
 def save_json(results: List[Dict], path: str):
@@ -239,6 +257,7 @@ def main():
       "dkim_aggressive": args.aggressive,
       "dkim_wordlist": args.dkim_wordlist or config.dkim_wordlist_path,
       "selector_threads": args.selector_threads,
+      "smtp_timeout": config.smtp_timeout,
    }
 
    results: List[Dict] = []
