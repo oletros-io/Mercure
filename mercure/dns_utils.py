@@ -1,3 +1,4 @@
+import socket
 from typing import List
 
 import dns.resolver
@@ -112,3 +113,13 @@ def query_ptr(ip: str) -> List[str]:
 
 def query_cname(name: str) -> List[str]:
    return [str(rr.target).rstrip(".") for rr in _resolve(name, "CNAME")]
+
+
+def resolve_ipv4(hostname: str, port: int = 25) -> str:
+   try:
+      results = socket.getaddrinfo(hostname, port, socket.AF_INET, socket.SOCK_STREAM)
+      if results:
+         return results[0][4][0]
+   except socket.gaierror:
+      pass
+   return hostname

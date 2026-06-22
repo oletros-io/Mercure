@@ -13,18 +13,18 @@ class CheckResult:
 
 
 WEIGHTS = {
+   "ghost": 4.0,
    "dmarc": 3.5,
    "spf": 3.0,
-   "dkim": 3.0,
-   "dnssec": 2.5,
-   "ghost": 2.5,
-   "caa": 2.0,
-   "tlsa": 1.5,
-   "mx": 1.5,
-   "ns": 1.5,
-   "ptr": 1.0,
-   "srv": 0.5,
-   "ipv6": 0.5,
+   "dkim": 2.5,
+   "dnssec": 1.5,
+   "caa": 1.5,
+   "mx": 1.0,
+   "ns": 1.0,
+   "tlsa": 0.5,
+   "ptr": 0.5,
+   "srv": 0.25,
+   "ipv6": 0.25,
 }
 
 SCORE_STYLES = {

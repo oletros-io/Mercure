@@ -3,12 +3,12 @@ import smtplib
 
 from .base import BaseCheck
 from ..scoring import CheckResult
-from ..dns_utils import query_mx, query_a
+from ..dns_utils import query_mx, query_a, resolve_ipv4
 from .. import logger
 
 EXO_SUFFIX = ".mail.protection.outlook.com"
-PROBE_EHLO = "mercure.audit.local"
-PROBE_FROM = "probe@mercure.audit.local"
+PROBE_EHLO_TPL = "mail.{domain}"
+PROBE_FROM_TPL = "postmaster@{domain}"
 SMTP_TIMEOUT = 10.0
 
 
@@ -55,18 +55,22 @@ def smtp_probe(endpoint: str, domain: str, timeout: float = SMTP_TIMEOUT) -> dic
    smtp = None
    try:
       smtp = smtplib.SMTP(timeout=timeout)
-      code, msg = smtp.connect(endpoint, 25)
+      ip = resolve_ipv4(endpoint, 25)
+      code, msg = smtp.connect(ip, 25)
       probe["connected"] = True
       probe["banner"] = msg.decode(errors="replace")
 
-      code, msg = smtp.ehlo(PROBE_EHLO)
+      ehlo_host = PROBE_EHLO_TPL.format(domain=domain)
+      probe_from = PROBE_FROM_TPL.format(domain=domain)
+
+      code, msg = smtp.ehlo(ehlo_host)
       probe["ehlo_code"] = code
       probe["ehlo_msg"] = msg.decode(errors="replace")
 
       if code != 250:
          return probe
 
-      code, msg = smtp.mail(PROBE_FROM)
+      code, msg = smtp.mail(probe_from)
       probe["mail_from_code"] = code
       probe["mail_from_msg"] = msg.decode(errors="replace")
 

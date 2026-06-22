@@ -1,5 +1,9 @@
 .env
+
 log/
+
 __pycache__/
 *.pyc
+
 .claude/
+BLOG.md

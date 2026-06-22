@@ -4,10 +4,17 @@
 
 ```bash
 pip install -r requirements.txt
-python mercure.py -d example.com
+
+# Score mode (audit DNS security posture)
+python mercure.py score -d example.com
+
+# Spoof mode (test if spoofed emails actually get delivered)
+python mercure.py spoof -d target.com -r recipient@example.com
 ```
 
-Output: Rich table with per-check scores (/10) and global score. 10/10 = maximum security.
+Score mode: Rich table with per-check scores (/10) and global score. 10/10 = maximum security.
+
+Spoof mode: Rich table showing which spoofing methods succeed or fail against the domain.
 
 ## 2. Target Profiles
 
@@ -56,7 +63,43 @@ python mercure.py -d target.com --checks ghost
 Complete email spoofing assessment:
 
 ```bash
-python mercure.py -d target.com --checks spf,dkim,dmarc,ghost
+python mercure.py score -d target.com --checks spf,dkim,dmarc,ghost
+```
+
+### Spoof Mode - Direct (No Relay)
+
+Test spoofing via direct MX delivery (no relay configured):
+
+```bash
+python mercure.py spoof -d target.com -r victim@example.com
+```
+
+### Spoof Mode - With SMTP Relay
+
+Configure an authenticated relay in `.env` for higher deliverability:
+
+```
+SMTP_RELAY_HOST=ssl0.ovh.net
+SMTP_RELAY_PORT=465
+SMTP_RELAY_USER=mercure@yourdomain.com
+SMTP_RELAY_PASS=your_password
+```
+
+Then run spoof mode normally — eligible methods auto-route through the relay:
+
+```bash
+python mercure.py spoof -d target.com -r victim@example.com
+```
+
+The console shows `relay configured: ssl0.ovh.net:465 (mercure@yourdomain.com)` on startup. Methods `ghost`, `relay`, `internal`, `backscatter` still connect directly.
+
+### Full Audit Workflow
+
+Score first, then spoof to validate findings:
+
+```bash
+python mercure.py score -d target.com --checks spf,dkim,dmarc,ghost
+python mercure.py spoof -d target.com -r test@yourlab.com
 ```
 
 ### Email Infrastructure Only
@@ -117,6 +160,9 @@ dig +short whoami.akamai.net
 - [ ] Review the check list: do you need all 12, or can you limit with `--checks`?
 - [ ] Decide on DKIM bruteforce: is the selector enumeration worth the query volume?
 - [ ] Ghost Sender check: the SMTP probe to port 25 is logged by EXO -- accept the risk or exclude with `--checks`
+- [ ] **Spoof mode**: you are sending actual emails. Ensure you have authorization and the recipient is a controlled test mailbox
+- [ ] **SMTP relay**: if configured, verify credentials work (`openssl s_client -connect ssl0.ovh.net:465` for SSL test)
+- [ ] **SMTP relay OPSEC**: relay logs your authenticated user — the relay provider sees sender, recipient, and content
 - [ ] Set appropriate thread count for the target's monitoring level
 
 ### During a Run
@@ -179,6 +225,32 @@ The EXO endpoint exists and MX routes through a third-party, but the SMTP probe 
 1. This may mean port 25 is blocked from your source IP, or the EXO endpoint has network-level restrictions
 2. Re-test from a different network (VPS, residential IP, VPN) to confirm reachability
 3. If still unreachable: the risk is lower but not zero -- the endpoint may be reachable from other networks
+
+### Spoof Mode - DELIVERED Results
+
+If any method shows DELIVERED:
+
+1. **direct DELIVERED**: the domain's SPF/DKIM/DMARC is not enforced by the recipient MX. This is the most common finding for domains with `p=none` or missing DMARC
+2. **ghost DELIVERED**: Ghost Sender attack succeeded. The recipient's EXO tenant has no partner connector. This bypasses all email authentication
+3. **null_from DELIVERED**: null envelope sender accepted. Bounce-style spoofing works -- the From header shows the spoofed domain but SPF checks pass on the empty envelope
+4. **subdomain DELIVERED**: DMARC subdomain policy (`sp=`) is missing or set to `none`. Attackers can spoof from any subdomain
+
+5. **relay DELIVERED**: relay delivered the email through the authenticated SMTP server. The relay accepted the spoofed envelope-from — some providers rewrite it, others accept it as-is
+6. **mismatch DELIVERED**: envelope/header domain mismatch not caught by DMARC alignment check
+7. **display_name DELIVERED**: display name spoofing passed through recipient filters — BEC-style attack works
+8. **internal DELIVERED**: target's MX accepts intra-domain mail from external sources without SPF check
+9. **backscatter DELIVERED**: target's MX generates NDR to spoofed bounce address — backscatter attack works
+10. **bs_inject DELIVERED**: NDR content injection succeeded. The bounce message carries the attacker's phishing content to the victim, delivered from the target's trusted MTA
+11. **bs_amp DELIVERED**: amplification attack works. N dead recipients generated N separate NDRs, all delivered to victim. Check the `accepted_count` in results for amplification factor
+12. **bs_oob DELIVERED**: auto-reply abuse works. Functional mailbox (info@, contact@, etc.) accepted the message and auto-reply/OOO goes to victim without sender validation
+
+### Spoof Mode - All REJECTED
+
+All 12 methods blocked means the domain has robust defenses:
+- SPF with `-all`
+- DKIM with strong keys
+- DMARC with `p=reject` and `sp=reject`
+- Partner connector configured (for EXO tenants)
 
 ### Global Score < 4/10
 

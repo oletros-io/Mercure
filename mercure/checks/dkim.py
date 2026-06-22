@@ -200,13 +200,17 @@ class DKIMCheck(BaseCheck):
 
       candidates: List[str] = []
       if bruteforce:
-         wl = []
+         file_sels = load_selectors_wordlist(wordlist) if wordlist else []
+         if file_sels:
+            base = list(dict.fromkeys(file_sels))
+            logger.info(f"Wordlist loaded: {len(base)} selectors from {wordlist}")
+         else:
+            base = list(BASE_SELECTORS)
          if aggressive:
             wl_expanded = expand_inline_patterns(INLINE_PATTERNS)
-            file_sels = load_selectors_wordlist(wordlist) if wordlist else []
-            wl = list(dict.fromkeys(file_sels + wl_expanded))
-            logger.info(f"Aggressive selectors count={len(wl)}")
-         candidates = brute_selectors(domain, wl)
+            base = list(dict.fromkeys(base + wl_expanded))
+            logger.info(f"Aggressive selectors count={len(base)}")
+         candidates = brute_selectors(domain, base)
 
       dkim_results: List[Dict] = []
       if candidates:

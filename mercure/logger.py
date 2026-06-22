@@ -11,7 +11,7 @@ console = Console()
 
 LEVEL_STYLES = {
    "debug": "grey50",
-   "info": "blue",
+   "info": "dodger_blue1",
    "warning": "orange1",
    "error": "red",
    "success": "green",
