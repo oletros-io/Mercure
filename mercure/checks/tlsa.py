@@ -7,7 +7,6 @@ from .. import logger
 class TLSACheck(BaseCheck):
    name = "tlsa"
    label = "TLSA"
-   weight = 1.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       fqdn = f"_25._tcp.{domain}"

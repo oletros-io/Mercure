@@ -10,8 +10,9 @@ from .. import logger
 def get_spf(domain: str) -> Optional[str]:
    txts = query_txt(domain)
    for t in txts:
-      if "v=spf1" in t.lower():
-         return t.strip().strip('"')
+      stripped = t.strip().strip('"')
+      if stripped.lower().startswith("v=spf1"):
+         return stripped
    logger.warning(f"no SPF record for {domain}")
    return None
 
@@ -22,7 +23,7 @@ def evaluate_spf(spf_txt: Optional[str]) -> Dict:
 
    spf = spf_txt.lower()
 
-   if "+all" in spf:
+   if re.search(r"(^|\s)\+all\b", spf):
       return {"score": 0, "reason": "allow_all_plus", "value": spf_txt}
 
    if "redirect=" in spf and not re.search(r"[-~?+]all\b", spf):
@@ -43,7 +44,6 @@ def evaluate_spf(spf_txt: Optional[str]) -> Dict:
 class SPFCheck(BaseCheck):
    name = "spf"
    label = "SPF"
-   weight = 3.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       spf_txt = get_spf(domain)

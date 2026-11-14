@@ -9,36 +9,56 @@ from ..dns_utils import query_txt, query_cname
 from .. import logger
 
 BASE_SELECTORS = [
-   "default", "dkim", "dkim1", "dkim2", "selector", "selector1", "selector2", "s1", "s2", "s3", "s4", "smtp", "smtp1", "smtp2", "smtp3",
-   "mail", "mail1", "mail2", "mail3", "api", "transactional", "transactional1", "transactional2", "marketing", "news", "bulk", "mx", "mx1",
-   "send", "send1", "sendgrid", "sparkpost", "postmark", "amazonses", "mailgun", "brevo", "mandrill", "google", "google1", "ms", "o365", "office",
-   "noreply", "no-reply", "newsletter", "key1", "key2", "key3", "selector3", "s5", "trans", "sales", "shop", "magento", "shopify", "notify",
-   "smtpapi", "bfi", "spop", "spop1024", "beta", "domk", "dk", "ei", "smtpout", "sm", "authsmtp", "alpha", "mesmtp", "cm", "prod", "pm", "gamma",
-   "dkrnt", "dkimrnt", "private", "gmmailerd", "pmta", "x", "qcdkim", "postfix", "mikd", "main", "m", "dk20050327", "delta", "yibm", "wesmail",
-   "test", "stigmate", "squaremail", "sitemail", "sasl", "sailthru", "responsys", "publickey", "proddkim", "mail-in", "key", "ED-DKIM",
-   "ebmailerd", "Corporate", "care", "0xdeadbeef", "yousendit", "www", "tilprivate", "testdk", "smtpcomcustomers", "smtpauth",
-   "sharedpool", "ses", "server", "scooby", "scarlet", "safe", "s", "pvt", "primus", "primary", "postfix.private", "outbound", "originating",
-   "one", "neomailout", "msa", "monkey", "mkt", "mimi", "mdaemon", "mailrelay", "mailjet", "mail-dkim", "mailo", "lists",
-   "iweb", "iport", "id", "hubris", "googleapps", "global", "gears", "exim4u", "exim", "et", "dyn", "duh", "dksel", "dkimmail", "corp",
-   "centralsmtp", "ca", "auth", "allselector", "zendesk1", "class",
+   "default", "dkim", "dkim1", "dkim2", "selector", "selector1", "selector2",
+   "s1", "s2", "s3", "s4", "smtp", "smtp1", "smtp2", "smtp3", "mail", "mail1",
+   "mail2", "mail3", "api", "transactional", "transactional1", "transactional2",
+   "marketing", "news", "bulk", "mx", "mx1", "send", "send1", "sendgrid",
+   "sparkpost", "postmark", "amazonses", "mailgun", "brevo", "mandrill",
+   "google", "google1", "ms", "o365", "office", "noreply", "no-reply",
+   "newsletter", "key1", "key2", "key3", "selector3", "s5", "trans", "sales",
+   "shop", "magento", "shopify", "notify", "smtpapi", "bfi", "spop", "spop1024",
+   "beta", "domk", "dk", "ei", "smtpout", "sm", "authsmtp", "alpha", "mesmtp",
+   "cm", "prod", "pm", "gamma", "dkrnt", "dkimrnt", "private", "gmmailerd",
+   "pmta", "x", "qcdkim", "postfix", "mikd", "main", "m", "dk20050327",
+   "delta", "yibm", "wesmail", "test", "stigmate", "squaremail", "sitemail",
+   "sasl", "sailthru", "responsys", "publickey", "proddkim", "mail-in", "key",
+   "ED-DKIM", "ebmailerd", "Corporate", "care", "0xdeadbeef", "yousendit",
+   "www", "tilprivate", "testdk", "smtpcomcustomers", "smtpauth", "sharedpool",
+   "ses", "server", "scooby", "scarlet", "safe", "s", "pvt", "primus",
+   "primary", "postfix.private", "outbound", "originating", "one", "neomailout",
+   "msa", "monkey", "mkt", "mimi", "mdaemon", "mailrelay", "mailjet",
+   "mail-dkim", "mailo", "lists", "iweb", "iport", "id", "hubris",
+   "googleapps", "global", "gears", "exim4u", "exim", "et", "dyn", "duh",
+   "dksel", "dkimmail", "corp", "centralsmtp", "ca", "auth", "allselector",
+   "zendesk1", "class",
 ]
 
 INLINE_PATTERNS = [
    "default", "google", "mail", "class",
-   "s%L384,512,768,1024,2048%", "m%L384,512,768,1024,2048%", "smtpapi", "dkim", "bfi", "spop", "spop1024", "beta", "domk",
-   "key%N1,20%", "dk", "ei", "yesmail%N1,20%", "smtpout", "sm", "selector%N1,20%", "authsmtp", "alpha", "v%N1,5%", "mesmtp", "cm",
-   "prod", "pm", "gamma", "dkrnt", "dkimrnt", "private", "gmmailerd", "pmta", "m%N1,20%", "x", "selector", "qcdkim", "postfix", "mikd",
-   "main", "m", "dk20050327", "delta", "yibm", "wesmail", "test", "stigmate", "squaremail", "sitemail", "sel%N1,20%", "sasl", "sailthru",
-   "rsa%N1,20%", "responsys", "publickey", "proddkim", "my%N1,20%", "mail-in", "ls%N1,20%", "key", "ED-DKIM", "ebmailerd", "eb%N1,20%",
-   "dk%N1,20%", "Corporate", "care", "0xdeadbeef", "yousendit", "www", "tilprivate", "testdk", "smtpcomcustomers", "smtpauth", "smtp",
-   "sl%N1,20%", "sl", "sharedpool", "ses", "server", "scooby", "scarlet", "safe", "s", "s%N1,20%", "pvt", "primus", "primary", "postfix.private",
-   "outbound", "originating", "one", "neomailout", "mx", "msa", "monkey", "mkt", "mimi", "mdaemon", "mailrelay", "mailjet", "mail-dkim",
-   "mailo", "mandrill", "lists", "iweb", "iport", "id", "hubris", "googleapps", "global", "gears", "exim4u", "exim", "et", "dyn", "duh",
-   "dksel", "dkimmail", "corp", "centralsmtp", "ca", "bfi", "auth", "allselector", "zendesk1",
+   "s%L384,512,768,1024,2048%", "m%L384,512,768,1024,2048%", "smtpapi", "dkim",
+   "bfi", "spop", "spop1024", "beta", "domk", "key%N1,20%", "dk",
+   "ei", "yesmail%N1,20%", "smtpout", "sm", "selector%N1,20%", "authsmtp",
+   "alpha", "v%N1,5%", "mesmtp", "cm", "prod", "pm", "gamma", "dkrnt",
+   "dkimrnt", "private", "gmmailerd", "pmta", "m%N1,20%", "x", "selector",
+   "qcdkim", "postfix", "mikd", "main", "m", "dk20050327", "delta", "yibm",
+   "wesmail", "test", "stigmate", "squaremail", "sitemail", "sel%N1,20%",
+   "sasl", "sailthru", "rsa%N1,20%", "responsys", "publickey", "proddkim",
+   "my%N1,20%", "mail-in", "ls%N1,20%", "key", "ED-DKIM", "ebmailerd",
+   "eb%N1,20%", "dk%N1,20%", "Corporate", "care", "0xdeadbeef", "yousendit",
+   "www", "tilprivate", "testdk", "smtpcomcustomers", "smtpauth", "smtp",
+   "sl%N1,20%", "sl", "sharedpool", "ses", "server", "scooby", "scarlet",
+   "safe", "s", "s%N1,20%", "pvt", "primus", "primary", "postfix.private",
+   "outbound", "originating", "one", "neomailout", "mx", "msa", "monkey",
+   "mkt", "mimi", "mdaemon", "mailrelay", "mailjet", "mail-dkim", "mailo",
+   "mandrill", "lists", "iweb", "iport", "id", "hubris", "googleapps",
+   "global", "gears", "exim4u", "exim", "et", "dyn", "duh", "dksel",
+   "dkimmail", "corp", "centralsmtp", "ca", "bfi", "auth", "allselector",
+   "zendesk1",
 ]
 
 GUESSABLE_PATTERNS = [
-   r"^default$", r"^selector\d*$", r"^selector$", r"^s\d+$", r"^key\d+$", r"^dkim\d*$", r"^mail\d*$", r"^api$",
+   r"^default$", r"^selector\d*$", r"^selector$", r"^s\d+$", r"^key\d+$",
+   r"^dkim\d*$", r"^mail\d*$", r"^api$",
    r"^(marketing|transactional|newsletter|bulk|news)$", r"^(smtp|mx|send)$",
 ]
 
@@ -102,12 +122,58 @@ def parse_dkim_record(txt: str) -> Dict[str, str]:
    return d
 
 
-def approx_key_bits(p_value: str) -> int:
+def _read_der_length(data: bytes, pos: int) -> tuple:
+   if data[pos] < 0x80:
+      return pos + 1, data[pos]
+   num_bytes = data[pos] & 0x7F
+   length = int.from_bytes(data[pos + 1:pos + 1 + num_bytes], "big")
+   return pos + 1 + num_bytes, length
+
+
+def parse_rsa_key_bits(p_value: str) -> int:
    try:
       raw = base64.b64decode(p_value + "===")
-      return len(raw) * 8
    except Exception:
       return 0
+
+   if len(raw) < 10:
+      return 0
+
+   try:
+      pos = 0
+      if raw[pos] != 0x30:
+         return len(raw) * 8
+      pos += 1
+      pos, _ = _read_der_length(raw, pos)
+
+      if raw[pos] != 0x30:
+         return len(raw) * 8
+      pos += 1
+      pos, algo_len = _read_der_length(raw, pos)
+      pos += algo_len
+
+      if raw[pos] != 0x03:
+         return len(raw) * 8
+      pos += 1
+      pos, _ = _read_der_length(raw, pos)
+      pos += 1
+
+      if raw[pos] != 0x30:
+         return len(raw) * 8
+      pos += 1
+      pos, _ = _read_der_length(raw, pos)
+
+      if raw[pos] != 0x02:
+         return len(raw) * 8
+      pos += 1
+      pos, mod_len = _read_der_length(raw, pos)
+
+      if mod_len > 0 and raw[pos] == 0x00:
+         mod_len -= 1
+
+      return mod_len * 8
+   except (IndexError, ValueError):
+      return len(raw) * 8
 
 
 def scan_selector(domain: str, selector: str) -> Dict:
@@ -125,7 +191,7 @@ def scan_selector(domain: str, selector: str) -> Dict:
       t = tags.get("t", "")
       n = tags.get("n", "")
       s = tags.get("s", "")
-      bits = approx_key_bits(p) if p else 0
+      bits = parse_rsa_key_bits(p) if p else 0
 
       risky = []
       if "l=" in rec:
@@ -142,7 +208,7 @@ def scan_selector(domain: str, selector: str) -> Dict:
          "selector": selector,
          "fqdn": fqdn,
          "present": True,
-         "key_bits_approx": bits,
+         "key_bits": bits,
          "weak_key": bool(bits and bits < 2048),
          "algo": k,
          "risky_tags": risky,
@@ -156,7 +222,7 @@ def scan_selector(domain: str, selector: str) -> Dict:
    return {"selector": selector, "fqdn": fqdn, "present": False}
 
 
-def brute_selectors(domain: str, extra: List[str]) -> List[str]:
+def brute_selectors(extra: List[str]) -> List[str]:
    base = list(dict.fromkeys(BASE_SELECTORS + extra))
    enriched = []
    for b in base:
@@ -190,7 +256,6 @@ def evaluate_dkim(results: List[Dict]) -> Dict:
 class DKIMCheck(BaseCheck):
    name = "dkim"
    label = "DKIM"
-   weight = 3.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       bruteforce = kwargs.get("dkim_bruteforce", True)
@@ -210,14 +275,12 @@ class DKIMCheck(BaseCheck):
             wl_expanded = expand_inline_patterns(INLINE_PATTERNS)
             base = list(dict.fromkeys(base + wl_expanded))
             logger.info(f"Aggressive selectors count={len(base)}")
-         candidates = brute_selectors(domain, base)
+         candidates = brute_selectors(base)
 
       dkim_results: List[Dict] = []
       if candidates:
-         seen = set()
-         uniq = [c for c in candidates if not (c in seen or seen.add(c))]
          with ThreadPoolExecutor(max_workers=max(2, selector_threads)) as executor:
-            futures = {executor.submit(scan_selector, domain, s): s for s in uniq}
+            futures = {executor.submit(scan_selector, domain, s): s for s in candidates}
             for fut in as_completed(futures):
                r = fut.result()
                if r.get("present"):

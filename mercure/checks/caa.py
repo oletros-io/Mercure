@@ -7,7 +7,6 @@ from .. import logger
 class CAACheck(BaseCheck):
    name = "caa"
    label = "CAA"
-   weight = 2.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       records = query_caa(domain)

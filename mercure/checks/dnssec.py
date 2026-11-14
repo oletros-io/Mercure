@@ -7,7 +7,6 @@ from .. import logger
 class DNSSECCheck(BaseCheck):
    name = "dnssec"
    label = "DNSSEC"
-   weight = 2.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       ds_records = query_ds(domain)

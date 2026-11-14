@@ -27,6 +27,9 @@ LEVEL_VALUES = {
 
 _lock = threading.Lock()
 _min_level = LEVEL_VALUES["info"]
+_pruned = False
+_log_handle = None
+_log_date = None
 
 
 def set_level(level: str):
@@ -39,12 +42,11 @@ def _ensure_log_dir() -> Path:
    return config.log_dir
 
 
-def _log_file() -> Path:
-   d = _ensure_log_dir()
-   return d / f"{datetime.now().strftime('%Y-%m-%d')}.log"
-
-
 def _prune():
+   global _pruned
+   if _pruned:
+      return
+   _pruned = True
    d = _ensure_log_dir()
    cutoff = datetime.now() - timedelta(days=config.log_retention_days)
    for f in d.glob("*.log"):
@@ -56,13 +58,31 @@ def _prune():
          pass
 
 
+def _get_handle():
+   global _log_handle, _log_date
+   today = datetime.now().strftime("%Y-%m-%d")
+   if _log_handle is not None and _log_date == today:
+      return _log_handle
+   if _log_handle is not None:
+      try:
+         _log_handle.close()
+      except Exception:
+         pass
+   d = _ensure_log_dir()
+   _log_handle = (d / f"{today}.log").open("a", encoding="utf-8")
+   _log_date = today
+   return _log_handle
+
+
 def _write_disk(level: str, msg: str):
    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
    line = f"{ts} {level} {msg}\n"
    with _lock:
       try:
-         with _log_file().open("a", encoding="utf-8") as fh:
-            fh.write(line)
+         _prune()
+         fh = _get_handle()
+         fh.write(line)
+         fh.flush()
       except Exception:
          pass
 
@@ -98,6 +118,3 @@ def error(msg: str):
 
 def success(msg: str):
    log(msg, "success")
-
-
-_prune()

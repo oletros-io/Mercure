@@ -4,10 +4,15 @@ from ..dns_utils import query_a, query_ptr
 from .. import logger
 
 
+def _domain_matches_ptr(domain: str, ptr: str) -> bool:
+   d = domain.lower().rstrip(".")
+   p = ptr.lower().rstrip(".")
+   return p == d or p.endswith(f".{d}")
+
+
 class PTRCheck(BaseCheck):
    name = "ptr"
    label = "PTR"
-   weight = 1.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       a_records = query_a(domain)
@@ -48,9 +53,8 @@ class PTRCheck(BaseCheck):
             details={"a_records": a_records, "ptr_results": ptr_results, "missing": ips_without_ptr},
          )
 
-      domain_lower = domain.lower().rstrip(".")
       matching = any(
-         any(domain_lower in ptr.lower() for ptr in ptrs)
+         any(_domain_matches_ptr(domain, ptr) for ptr in ptrs)
          for ptrs in ips_with_ptr.values()
       )
 

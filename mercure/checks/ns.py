@@ -14,7 +14,6 @@ def _extract_provider(ns: str) -> str:
 class NSCheck(BaseCheck):
    name = "ns"
    label = "NS"
-   weight = 1.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       records = query_ns(domain)

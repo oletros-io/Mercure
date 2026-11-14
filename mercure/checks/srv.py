@@ -14,7 +14,6 @@ MAIL_SRV_NAMES = [
 class SRVCheck(BaseCheck):
    name = "srv"
    label = "SRV"
-   weight = 0.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       found = {}

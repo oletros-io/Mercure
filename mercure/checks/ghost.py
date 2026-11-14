@@ -116,7 +116,6 @@ def smtp_probe(endpoint: str, domain: str, timeout: float = SMTP_TIMEOUT) -> dic
 class GhostSenderCheck(BaseCheck):
    name = "ghost"
    label = "GHOST"
-   weight = 2.0
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       endpoint = derive_exo_endpoint(domain)

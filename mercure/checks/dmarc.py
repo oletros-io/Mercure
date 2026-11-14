@@ -52,7 +52,6 @@ def parse_dmarc(dmarc_txt: Optional[str]) -> Dict:
 class DMARCCheck(BaseCheck):
    name = "dmarc"
    label = "DMARC"
-   weight = 3.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       dmarc_txt = get_dmarc(domain)

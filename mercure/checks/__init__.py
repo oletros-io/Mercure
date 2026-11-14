@@ -1,32 +1,30 @@
-from .spf import SPFCheck
-from .dkim import DKIMCheck
-from .dmarc import DMARCCheck
-from .caa import CAACheck
-from .mx import MXCheck
-from .ipv6 import IPv6Check
-from .srv import SRVCheck
-from .dnssec import DNSSECCheck
-from .ns import NSCheck
-from .ptr import PTRCheck
-from .tlsa import TLSACheck
-from .ghost import GhostSenderCheck
+import importlib
+import pkgutil
+from pathlib import Path
 
-ALL_CHECKS = [
-   SPFCheck,
-   DKIMCheck,
-   DMARCCheck,
-   CAACheck,
-   MXCheck,
-   IPv6Check,
-   SRVCheck,
-   DNSSECCheck,
-   NSCheck,
-   PTRCheck,
-   TLSACheck,
-   GhostSenderCheck,
-]
+from .base import BaseCheck
 
-CHECK_MAP = {cls.name: cls for cls in ALL_CHECKS}
+ALL_CHECKS = []
+CHECK_MAP = {}
+
+
+def _discover():
+   pkg_dir = Path(__file__).parent
+   for info in pkgutil.iter_modules([str(pkg_dir)]):
+      if info.name == "base":
+         continue
+      mod = importlib.import_module(f".{info.name}", __package__)
+      for attr_name in dir(mod):
+         attr = getattr(mod, attr_name)
+         if (isinstance(attr, type)
+               and issubclass(attr, BaseCheck)
+               and attr is not BaseCheck
+               and attr.name):
+            ALL_CHECKS.append(attr)
+            CHECK_MAP[attr.name] = attr
+
+
+_discover()
 
 
 def get_check_by_name(name: str):

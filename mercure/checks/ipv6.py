@@ -7,7 +7,6 @@ from .. import logger
 class IPv6Check(BaseCheck):
    name = "ipv6"
    label = "IPv6"
-   weight = 0.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       records = query_aaaa(domain)

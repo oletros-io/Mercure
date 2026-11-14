@@ -1,13 +1,13 @@
-import smtplib
-import socket
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .config import config
-from .dns_utils import query_mx, query_a, resolve_ipv4
+from .dns_utils import query_mx, resolve_ipv4
 from .checks.ghost import derive_exo_endpoint, mx_points_to_exo, exo_endpoint_resolves
+from .smtp import direct_deliver, relay_deliver, amp_deliver, relay_configured
 from . import logger
 
 LOREM_IPSUM = (
@@ -35,7 +35,7 @@ def build_email(sender: str, recipient: str, method: str = "",
    msg["Subject"] = subject
    msg["Date"] = formatdate(localtime=True)
    msg["Message-ID"] = f"<{uuid.uuid4()}@{domain}>"
-   msg["X-Oletros"] = "https://oletros.io/"
+   msg["X-Oletros-Tool"] = "https://oletros.io/"
    return msg
 
 
@@ -46,172 +46,6 @@ def _resolve_mx_sorted(domain: str) -> List[tuple]:
 
 def resolve_recipient_mx(recipient: str) -> List[tuple]:
    return _resolve_mx_sorted(recipient.split("@")[1])
-
-
-def smtp_deliver(host: str, port: int, envelope_from: str, recipient: str,
-                 msg: MIMEText, ehlo_host: str, timeout: float = 10.0) -> Dict:
-   result = {
-      "server": f"{host}:{port}",
-      "connected": False,
-      "banner": "",
-      "starttls": False,
-      "ehlo_code": 0,
-      "mail_from_code": 0,
-      "mail_from_msg": "",
-      "rcpt_to_code": 0,
-      "rcpt_to_msg": "",
-      "data_code": 0,
-      "data_msg": "",
-      "delivered": False,
-      "error": "",
-   }
-
-   conn = None
-   try:
-      conn = smtplib.SMTP(timeout=timeout)
-      ip = resolve_ipv4(host, port)
-      code, banner = conn.connect(ip, port)
-      result["connected"] = True
-      result["banner"] = banner.decode(errors="replace")
-
-      code, resp = conn.ehlo(ehlo_host)
-      result["ehlo_code"] = code
-      if code != 250:
-         result["error"] = f"EHLO rejected: {code}"
-         return result
-
-      if conn.has_extn("STARTTLS"):
-         try:
-            conn.starttls()
-            conn.ehlo(ehlo_host)
-            result["starttls"] = True
-         except Exception:
-            pass
-
-      code, resp = conn.mail(envelope_from)
-      result["mail_from_code"] = code
-      result["mail_from_msg"] = resp.decode(errors="replace")
-      if code != 250:
-         return result
-
-      code, resp = conn.rcpt(recipient)
-      result["rcpt_to_code"] = code
-      result["rcpt_to_msg"] = resp.decode(errors="replace")
-      if code != 250:
-         return result
-
-      code, resp = conn.data(msg.as_bytes())
-      result["data_code"] = code
-      result["data_msg"] = resp.decode(errors="replace")
-      if 200 <= code < 300:
-         result["delivered"] = True
-
-   except smtplib.SMTPDataError as exc:
-      result["data_code"] = exc.smtp_code
-      err = exc.smtp_error
-      result["data_msg"] = err.decode(errors="replace") if isinstance(err, bytes) else str(err)
-   except smtplib.SMTPServerDisconnected as exc:
-      result["error"] = f"disconnected: {exc}"
-   except (smtplib.SMTPConnectError, socket.timeout, TimeoutError) as exc:
-      result["error"] = f"connection timeout: {exc}"
-   except OSError as exc:
-      result["error"] = f"network error: {exc}"
-   finally:
-      if conn:
-         try:
-            conn.quit()
-         except Exception:
-            pass
-
-   return result
-
-
-def _relay_configured() -> bool:
-   return bool(config.smtp_relay_host and config.smtp_relay_user and config.smtp_relay_pass)
-
-
-def relay_deliver(envelope_from: str, recipient: str, msg: MIMEText,
-                  timeout: float = 10.0) -> Dict:
-   host = config.smtp_relay_host
-   port = config.smtp_relay_port
-   result = {
-      "server": f"{host}:{port} (relay)",
-      "connected": False,
-      "banner": "",
-      "starttls": False,
-      "authenticated": False,
-      "ehlo_code": 0,
-      "mail_from_code": 0,
-      "mail_from_msg": "",
-      "rcpt_to_code": 0,
-      "rcpt_to_msg": "",
-      "data_code": 0,
-      "data_msg": "",
-      "delivered": False,
-      "error": "",
-   }
-
-   conn = None
-   try:
-      if port == 465:
-         conn = smtplib.SMTP_SSL(host, port, timeout=timeout)
-      else:
-         conn = smtplib.SMTP(host, port, timeout=timeout)
-      result["connected"] = True
-
-      code, resp = conn.ehlo()
-      result["ehlo_code"] = code
-      if code != 250:
-         result["error"] = f"EHLO rejected: {code}"
-         return result
-
-      if port != 465 and conn.has_extn("STARTTLS"):
-         conn.starttls()
-         conn.ehlo()
-         result["starttls"] = True
-
-      conn.login(config.smtp_relay_user, config.smtp_relay_pass)
-      result["authenticated"] = True
-
-      code, resp = conn.mail(envelope_from)
-      result["mail_from_code"] = code
-      result["mail_from_msg"] = resp.decode(errors="replace")
-      if code != 250:
-         return result
-
-      code, resp = conn.rcpt(recipient)
-      result["rcpt_to_code"] = code
-      result["rcpt_to_msg"] = resp.decode(errors="replace")
-      if code != 250:
-         return result
-
-      code, resp = conn.data(msg.as_bytes())
-      result["data_code"] = code
-      result["data_msg"] = resp.decode(errors="replace")
-      if 200 <= code < 300:
-         result["delivered"] = True
-
-   except smtplib.SMTPAuthenticationError as exc:
-      err = exc.smtp_error
-      result["error"] = f"auth failed: {err.decode(errors='replace') if isinstance(err, bytes) else str(err)}"
-   except smtplib.SMTPDataError as exc:
-      result["data_code"] = exc.smtp_code
-      err = exc.smtp_error
-      result["data_msg"] = err.decode(errors="replace") if isinstance(err, bytes) else str(err)
-   except smtplib.SMTPServerDisconnected as exc:
-      result["error"] = f"disconnected: {exc}"
-   except (smtplib.SMTPConnectError, socket.timeout, TimeoutError) as exc:
-      result["error"] = f"connection timeout: {exc}"
-   except OSError as exc:
-      result["error"] = f"network error: {exc}"
-   finally:
-      if conn:
-         try:
-            conn.quit()
-         except Exception:
-            pass
-
-   return result
 
 
 def _format_reason(result: Dict) -> str:
@@ -228,17 +62,6 @@ def _format_reason(result: Dict) -> str:
    return "unknown"
 
 
-def _try_mx_delivery(mx_records: list, envelope_from: str, recipient: str,
-                     msg: MIMEText, ehlo_host: str, timeout: float) -> Optional[Dict]:
-   last = None
-   for _pref, exchange in mx_records:
-      result = smtp_deliver(exchange, 25, envelope_from, recipient, msg, ehlo_host, timeout)
-      last = result
-      if result["connected"]:
-         return result
-   return last
-
-
 def _status_from_result(result: Dict) -> str:
    if result["delivered"]:
       return "delivered"
@@ -252,25 +75,63 @@ def _make_result(method: str, result: Dict) -> Dict:
            "server": result["server"], "reason": _format_reason(result), "smtp": result}
 
 
-def method_direct(sender: str, recipient: str, timeout: float) -> Dict:
-   msg = build_email(sender, recipient, "direct")
+def _try_mx_delivery(mx_records: list, envelope_from: str, recipient: str,
+                     msg_bytes: bytes, ehlo_host: str, timeout: float) -> Dict:
+   last = None
+   for _pref, exchange in mx_records:
+      result = direct_deliver(exchange, 25, envelope_from, [recipient], msg_bytes, ehlo_host, timeout)
+      last = result
+      if result["connected"]:
+         return result
+   return last
 
-   if _relay_configured():
-      result = relay_deliver(sender, recipient, msg, timeout)
-      return _make_result("direct", result)
 
-   ehlo = f"mail.{_sender_domain(sender)}"
+def _skip_result(method: str, reason: str) -> Dict:
+   return {"method": method, "status": "skip", "server": "-", "reason": reason}
+
+
+def _error_result(method: str, reason: str) -> Dict:
+   return {"method": method, "status": "error", "server": "-", "reason": reason}
+
+
+def _deliver_via_relay_or_mx(method: str, envelope_from: str, recipient: str,
+                             msg: MIMEText, ehlo_host: str, timeout: float) -> Dict:
+   msg_bytes = msg.as_bytes()
+
+   if relay_configured():
+      result = relay_deliver(envelope_from, [recipient], msg_bytes, timeout)
+      return _make_result(method, result)
+
    mx_records = resolve_recipient_mx(recipient)
    if not mx_records:
-      return {"method": "direct", "status": "error", "server": "-",
-              "reason": "no MX for recipient domain"}
+      return _error_result(method, "no MX for recipient domain")
 
-   result = _try_mx_delivery(mx_records, sender, recipient, msg, ehlo, timeout)
+   result = _try_mx_delivery(mx_records, envelope_from, recipient, msg_bytes, ehlo_host, timeout)
    if not result:
-      return {"method": "direct", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
+      return _error_result(method, "all MX unreachable")
 
-   return _make_result("direct", result)
+   return _make_result(method, result)
+
+
+def _deliver_via_target_mx(method: str, domain: str, envelope_from: str,
+                           recipient: str, msg: MIMEText, ehlo_host: str,
+                           timeout: float) -> Dict:
+   msg_bytes = msg.as_bytes()
+   mx_records = _resolve_mx_sorted(domain)
+   if not mx_records:
+      return _error_result(method, "no MX for target domain")
+
+   result = _try_mx_delivery(mx_records, envelope_from, recipient, msg_bytes, ehlo_host, timeout)
+   if not result:
+      return _error_result(method, "all MX unreachable")
+
+   return _make_result(method, result)
+
+
+def method_direct(sender: str, recipient: str, timeout: float) -> Dict:
+   msg = build_email(sender, recipient, "direct")
+   ehlo = f"mail.{_sender_domain(sender)}"
+   return _deliver_via_relay_or_mx("direct", sender, recipient, msg, ehlo, timeout)
 
 
 def method_ghost(sender: str, recipient: str, timeout: float) -> Dict:
@@ -281,59 +142,27 @@ def method_ghost(sender: str, recipient: str, timeout: float) -> Dict:
    exo_ips = exo_endpoint_resolves(endpoint)
 
    if not exo_ips:
-      return {"method": "ghost", "status": "skip", "server": endpoint,
-              "reason": "recipient not on Exchange Online"}
+      return _skip_result("ghost", "recipient not on Exchange Online")
 
    mx_direct, _, _ = mx_points_to_exo(recipient_domain)
    if mx_direct:
-      return {"method": "ghost", "status": "skip", "server": endpoint,
-              "reason": "MX already direct to EXO (no bypass path)"}
+      return _skip_result("ghost", "MX already direct to EXO (no bypass path)")
 
-   result = smtp_deliver(endpoint, 25, sender, recipient, msg, ehlo, timeout)
+   result = direct_deliver(endpoint, 25, sender, [recipient], msg.as_bytes(), ehlo, timeout)
    return _make_result("ghost", result)
 
 
 def method_null_from(sender: str, recipient: str, timeout: float) -> Dict:
    msg = build_email(sender, recipient, "null_from")
-
-   if _relay_configured():
-      result = relay_deliver("", recipient, msg, timeout)
-      return _make_result("null_from", result)
-
    ehlo = f"mail.{_sender_domain(sender)}"
-   mx_records = resolve_recipient_mx(recipient)
-   if not mx_records:
-      return {"method": "null_from", "status": "error", "server": "-",
-              "reason": "no MX for recipient domain"}
-
-   result = _try_mx_delivery(mx_records, "", recipient, msg, ehlo, timeout)
-   if not result:
-      return {"method": "null_from", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("null_from", result)
+   return _deliver_via_relay_or_mx("null_from", "", recipient, msg, ehlo, timeout)
 
 
 def method_subdomain(domain: str, recipient: str, timeout: float) -> Dict:
    sub_sender = f"mercure@nonexistent.{domain}"
-   sub_msg = build_email(sub_sender, recipient, "subdomain")
-
-   if _relay_configured():
-      result = relay_deliver(sub_sender, recipient, sub_msg, timeout)
-      return _make_result("subdomain", result)
-
+   msg = build_email(sub_sender, recipient, "subdomain")
    ehlo = f"mail.nonexistent.{domain}"
-   mx_records = resolve_recipient_mx(recipient)
-   if not mx_records:
-      return {"method": "subdomain", "status": "error", "server": "-",
-              "reason": "no MX for recipient domain"}
-
-   result = _try_mx_delivery(mx_records, sub_sender, recipient, sub_msg, ehlo, timeout)
-   if not result:
-      return {"method": "subdomain", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("subdomain", result)
+   return _deliver_via_relay_or_mx("subdomain", sub_sender, recipient, msg, ehlo, timeout)
 
 
 def method_relay(sender: str, domain: str, recipient: str, timeout: float) -> Dict:
@@ -341,13 +170,11 @@ def method_relay(sender: str, domain: str, recipient: str, timeout: float) -> Di
    ehlo = f"mail.{domain}"
    mx_records = _resolve_mx_sorted(domain)
    if not mx_records:
-      return {"method": "relay", "status": "skip", "server": "-",
-              "reason": "no MX for sender domain"}
+      return _skip_result("relay", "no MX for sender domain")
 
-   result = _try_mx_delivery(mx_records, sender, recipient, msg, ehlo, timeout)
+   result = _try_mx_delivery(mx_records, sender, recipient, msg.as_bytes(), ehlo, timeout)
    if not result:
-      return {"method": "relay", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
+      return _error_result("relay", "all MX unreachable")
 
    return _make_result("relay", result)
 
@@ -356,87 +183,35 @@ def method_mismatch(sender: str, recipient: str, timeout: float) -> Dict:
    envelope_domain = f"bounce-{uuid.uuid4().hex[:6]}.local"
    envelope_from = f"noreply@{envelope_domain}"
    msg = build_email(sender, recipient, "mismatch")
-
-   if _relay_configured():
-      result = relay_deliver(envelope_from, recipient, msg, timeout)
-      return _make_result("mismatch", result)
-
    ehlo = f"mail.{envelope_domain}"
-   mx_records = resolve_recipient_mx(recipient)
-   if not mx_records:
-      return {"method": "mismatch", "status": "error", "server": "-",
-              "reason": "no MX for recipient domain"}
-
-   result = _try_mx_delivery(mx_records, envelope_from, recipient, msg, ehlo, timeout)
-   if not result:
-      return {"method": "mismatch", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("mismatch", result)
+   return _deliver_via_relay_or_mx("mismatch", envelope_from, recipient, msg, ehlo, timeout)
 
 
 def method_display_name(sender: str, domain: str, recipient: str,
                         timeout: float) -> Dict:
    display_from = f'"{sender}" <noreply@notifications.{domain}>'
    envelope_from = f"noreply@notifications.{domain}"
-   msg = build_email(sender, recipient, "display_name",
-                     from_override=display_from)
-
-   if _relay_configured():
-      result = relay_deliver(envelope_from, recipient, msg, timeout)
-      return _make_result("display_name", result)
-
+   msg = build_email(sender, recipient, "display_name", from_override=display_from)
    ehlo = f"mail.notifications.{domain}"
-   mx_records = resolve_recipient_mx(recipient)
-   if not mx_records:
-      return {"method": "display_name", "status": "error", "server": "-",
-              "reason": "no MX for recipient domain"}
-
-   result = _try_mx_delivery(mx_records, envelope_from, recipient, msg, ehlo, timeout)
-   if not result:
-      return {"method": "display_name", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("display_name", result)
+   return _deliver_via_relay_or_mx("display_name", envelope_from, recipient, msg, ehlo, timeout)
 
 
 def method_internal(sender: str, domain: str, recipient: str,
                     timeout: float) -> Dict:
    recipient_domain = recipient.split("@")[1].lower()
    if recipient_domain != domain.lower():
-      return {"method": "internal", "status": "skip", "server": "-",
-              "reason": f"recipient not in target domain ({recipient_domain} != {domain})"}
+      return _skip_result("internal", f"recipient not in target domain ({recipient_domain} != {domain})")
 
    msg = build_email(sender, recipient, "internal")
    ehlo = f"mail.{domain}"
-   mx_records = _resolve_mx_sorted(domain)
-   if not mx_records:
-      return {"method": "internal", "status": "error", "server": "-",
-              "reason": "no MX for target domain"}
-
-   result = _try_mx_delivery(mx_records, sender, recipient, msg, ehlo, timeout)
-   if not result:
-      return {"method": "internal", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("internal", result)
+   return _deliver_via_target_mx("internal", domain, sender, recipient, msg, ehlo, timeout)
 
 
 def method_backscatter(domain: str, recipient: str, timeout: float) -> Dict:
    dead_rcpt = f"user.{uuid.uuid4().hex[:6]}@{domain}"
    msg = build_email(f"noreply@{domain}", dead_rcpt, "backscatter")
    ehlo = f"mail.{_sender_domain(recipient)}"
-   mx_records = _resolve_mx_sorted(domain)
-   if not mx_records:
-      return {"method": "backscatter", "status": "error", "server": "-",
-              "reason": "no MX for target domain"}
-
-   result = _try_mx_delivery(mx_records, recipient, dead_rcpt, msg, ehlo, timeout)
-   if not result:
-      return {"method": "backscatter", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("backscatter", result)
+   return _deliver_via_target_mx("backscatter", domain, recipient, dead_rcpt, msg, ehlo, timeout)
 
 
 INJECT_BODY = (
@@ -465,111 +240,13 @@ def method_bs_inject(domain: str, recipient: str, timeout: float) -> Dict:
    msg["Message-ID"] = f"<{uuid.uuid4()}@{domain}>"
    msg["X-Priority"] = "1"
    msg["Importance"] = "High"
-   msg["X-Oletros"] = "https://oletros.io/"
+   msg["X-Oletros-Tool"] = "https://oletros.io/"
 
    ehlo = f"mail.{_sender_domain(recipient)}"
-   mx_records = _resolve_mx_sorted(domain)
-   if not mx_records:
-      return {"method": "bs_inject", "status": "error", "server": "-",
-              "reason": "no MX for target domain"}
-
-   result = _try_mx_delivery(mx_records, recipient, dead_rcpt, msg, ehlo, timeout)
-   if not result:
-      return {"method": "bs_inject", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
-
-   return _make_result("bs_inject", result)
+   return _deliver_via_target_mx("bs_inject", domain, recipient, dead_rcpt, msg, ehlo, timeout)
 
 
 AMP_DEAD_COUNT = 5
-
-
-def _amp_smtp_deliver(host: str, port: int, envelope_from: str,
-                      dead_recipients: List[str], msg: MIMEText,
-                      ehlo_host: str, timeout: float) -> Dict:
-   result = {
-      "server": f"{host}:{port}",
-      "connected": False,
-      "banner": "",
-      "starttls": False,
-      "ehlo_code": 0,
-      "mail_from_code": 0,
-      "mail_from_msg": "",
-      "rcpt_to_code": 0,
-      "rcpt_to_msg": "",
-      "data_code": 0,
-      "data_msg": "",
-      "delivered": False,
-      "error": "",
-      "accepted_count": 0,
-      "rejected_count": 0,
-      "total_recipients": len(dead_recipients),
-   }
-
-   conn = None
-   try:
-      conn = smtplib.SMTP(timeout=timeout)
-      ip = resolve_ipv4(host, port)
-      code, banner = conn.connect(ip, port)
-      result["connected"] = True
-      result["banner"] = banner.decode(errors="replace")
-
-      code, resp = conn.ehlo(ehlo_host)
-      result["ehlo_code"] = code
-      if code != 250:
-         result["error"] = f"EHLO rejected: {code}"
-         return result
-
-      if conn.has_extn("STARTTLS"):
-         try:
-            conn.starttls()
-            conn.ehlo(ehlo_host)
-            result["starttls"] = True
-         except Exception:
-            pass
-
-      code, resp = conn.mail(envelope_from)
-      result["mail_from_code"] = code
-      result["mail_from_msg"] = resp.decode(errors="replace")
-      if code != 250:
-         return result
-
-      for rcpt in dead_recipients:
-         code, resp = conn.rcpt(rcpt)
-         if code == 250:
-            result["accepted_count"] += 1
-         else:
-            result["rejected_count"] += 1
-         result["rcpt_to_code"] = code
-         result["rcpt_to_msg"] = resp.decode(errors="replace")
-
-      if result["accepted_count"] > 0:
-         code, resp = conn.data(msg.as_bytes())
-         result["data_code"] = code
-         result["data_msg"] = resp.decode(errors="replace")
-         if 200 <= code < 300:
-            result["delivered"] = True
-      elif result["rejected_count"] == len(dead_recipients):
-         pass
-
-   except smtplib.SMTPDataError as exc:
-      result["data_code"] = exc.smtp_code
-      err = exc.smtp_error
-      result["data_msg"] = err.decode(errors="replace") if isinstance(err, bytes) else str(err)
-   except smtplib.SMTPServerDisconnected as exc:
-      result["error"] = f"disconnected: {exc}"
-   except (smtplib.SMTPConnectError, socket.timeout, TimeoutError) as exc:
-      result["error"] = f"connection timeout: {exc}"
-   except OSError as exc:
-      result["error"] = f"network error: {exc}"
-   finally:
-      if conn:
-         try:
-            conn.quit()
-         except Exception:
-            pass
-
-   return result
 
 
 def _amp_format_reason(result: Dict) -> str:
@@ -592,19 +269,17 @@ def method_bs_amp(domain: str, recipient: str, timeout: float) -> Dict:
    ehlo = f"mail.{_sender_domain(recipient)}"
    mx_records = _resolve_mx_sorted(domain)
    if not mx_records:
-      return {"method": "bs_amp", "status": "error", "server": "-",
-              "reason": "no MX for target domain"}
+      return _error_result("bs_amp", "no MX for target domain")
 
    result = None
    for _pref, exchange in mx_records:
-      result = _amp_smtp_deliver(exchange, 25, recipient, dead_recipients,
-                                 msg, ehlo, timeout)
+      result = amp_deliver(exchange, 25, recipient, dead_recipients,
+                           msg.as_bytes(), ehlo, timeout)
       if result["connected"]:
          break
 
    if not result:
-      return {"method": "bs_amp", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
+      return _error_result("bs_amp", "all MX unreachable")
 
    status = _status_from_result(result)
    return {"method": "bs_amp", "status": status, "server": result["server"],
@@ -615,23 +290,20 @@ OOB_TARGETS = ["info", "contact", "support", "reception", "hello", "office"]
 
 
 def method_bs_oob(domain: str, recipient: str, timeout: float) -> Dict:
-   oob_rcpt = f"{OOB_TARGETS[0]}@{domain}"
-   msg = build_email(f"noreply@{domain}", oob_rcpt, "bs_oob")
    ehlo = f"mail.{_sender_domain(recipient)}"
    mx_records = _resolve_mx_sorted(domain)
    if not mx_records:
-      return {"method": "bs_oob", "status": "error", "server": "-",
-              "reason": "no MX for target domain"}
+      return _error_result("bs_oob", "no MX for target domain")
 
    best_result = None
    accepted_target = None
    for target_local in OOB_TARGETS:
       target_addr = f"{target_local}@{domain}"
-      msg_oob = build_email(f"noreply@{domain}", target_addr, "bs_oob")
+      msg = build_email(f"noreply@{domain}", target_addr, "bs_oob")
 
       for _pref, exchange in mx_records:
-         result = smtp_deliver(exchange, 25, recipient, target_addr,
-                               msg_oob, ehlo, timeout)
+         result = direct_deliver(exchange, 25, recipient, [target_addr],
+                                 msg.as_bytes(), ehlo, timeout)
          if result["connected"]:
             if result["delivered"]:
                best_result = result
@@ -646,8 +318,7 @@ def method_bs_oob(domain: str, recipient: str, timeout: float) -> Dict:
          break
 
    if not best_result:
-      return {"method": "bs_oob", "status": "error", "server": "-",
-              "reason": "all MX unreachable"}
+      return _error_result("bs_oob", "all MX unreachable")
 
    base = _make_result("bs_oob", best_result)
    if best_result.get("delivered") and accepted_target:
@@ -657,10 +328,11 @@ def method_bs_oob(domain: str, recipient: str, timeout: float) -> Dict:
    return base
 
 
-def run_spoof(domain: str, recipient: str, timeout: float = 10.0) -> List[Dict]:
+def run_spoof(domain: str, recipient: str, timeout: float = 10.0,
+              parallel: bool = True) -> List[Dict]:
    sender = f"mercure@{domain}"
 
-   if _relay_configured():
+   if relay_configured():
       logger.info(f"relay configured: {config.smtp_relay_host}:{config.smtp_relay_port} ({config.smtp_relay_user})")
    else:
       logger.info("no relay configured, using direct MX delivery")
@@ -680,24 +352,58 @@ def run_spoof(domain: str, recipient: str, timeout: float = 10.0) -> List[Dict]:
       ("bs_oob", lambda: method_bs_oob(domain, recipient, timeout)),
    ]
 
+   if parallel:
+      return _run_parallel(methods)
+   return _run_sequential(methods)
+
+
+def _run_parallel(methods: list) -> List[Dict]:
+   results = {}
+   with ThreadPoolExecutor(max_workers=6) as executor:
+      futures = {}
+      for name, fn in methods:
+         logger.info(f"spoofing method: {name}")
+         futures[executor.submit(fn)] = name
+
+      for fut in as_completed(futures):
+         name = futures[fut]
+         try:
+            result = fut.result()
+            results[name] = result
+            _log_result(name, result)
+         except Exception as exc:
+            logger.error(f"  {name}: exception - {exc}")
+            results[name] = _error_result(name, str(exc))
+
+   ordered = []
+   for name, _ in methods:
+      if name in results:
+         ordered.append(results[name])
+   return ordered
+
+
+def _run_sequential(methods: list) -> List[Dict]:
    results = []
    for name, fn in methods:
       logger.info(f"spoofing method: {name}")
       try:
          result = fn()
          results.append(result)
-         st = result["status"]
-         reason = result["reason"]
-         if st == "delivered":
-            logger.warning(f"  {name}: DELIVERED - {reason}")
-         elif st == "rejected":
-            logger.info(f"  {name}: REJECTED - {reason}")
-         elif st == "skip":
-            logger.info(f"  {name}: SKIPPED - {reason}")
-         else:
-            logger.error(f"  {name}: ERROR - {reason}")
+         _log_result(name, result)
       except Exception as exc:
          logger.error(f"  {name}: exception - {exc}")
-         results.append({"method": name, "status": "error", "server": "-", "reason": str(exc)})
-
+         results.append(_error_result(name, str(exc)))
    return results
+
+
+def _log_result(name: str, result: Dict):
+   st = result["status"]
+   reason = result["reason"]
+   if st == "delivered":
+      logger.warning(f"  {name}: DELIVERED - {reason}")
+   elif st == "rejected":
+      logger.info(f"  {name}: REJECTED - {reason}")
+   elif st == "skip":
+      logger.info(f"  {name}: SKIPPED - {reason}")
+   else:
+      logger.error(f"  {name}: ERROR - {reason}")

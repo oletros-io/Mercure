@@ -9,7 +9,6 @@ from .. import logger
 class MXCheck(BaseCheck):
    name = "mx"
    label = "MX"
-   weight = 1.5
 
    def run(self, domain: str, **kwargs) -> CheckResult:
       records = query_mx(domain)

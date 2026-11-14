@@ -1,42 +1,102 @@
 # Mercure - Domain Security Auditor
 
-Mercure is a unified CLI tool for auditing the security posture of a domain. It checks email authentication (SPF, DKIM, DMARC), DNS infrastructure (NS, MX, DNSSEC, CAA), additional records (PTR, TLSA, SRV, IPv6), and active SMTP vulnerabilities (Ghost Sender).
+Mercure is a blackbox domain security auditor. From a single domain name, it runs 49 security checks across DNS, email authentication, TLS/certificates, web headers, subdomain takeover, email gateway bypass, SMTP reconnaissance, and infrastructure mapping. Passive by default, intrusive on demand. Integrates with ProjectDiscovery tools (subfinder, nuclei, katana) when available.
 
 ## Scoring
 
-**10/10 = maximum security. 0/10 = no security.**
+**Dual scoring system:**
+- **Security**: 10/10 = maximum security, 0/10 = no security (weighted security posture)
+- **Exploitability**: 10/10 = trivially exploitable, 0/10 = impractical to exploit (weighted by attack ease - like CVSS vs KEV)
 
-Each check returns a score from 0 (no security) to 10 (maximum security). A weighted global score out of 10 is computed from all checks.
+Results auto-saved to `results/YYYYMMDD_XXXXX.txt` as JSON with full per-check details.
 
-## Checks
+## Checks (49)
 
-| Check | Weight | Score mapping | What it does | Why it matters |
-|---|---|---|---|---|
-| **GHOST** | 4.0 | 0: vulnerable / 3: inconclusive / 7: EXO unreachable or rejected / 10: not EXO or mitigated | Ghost Sender attack: probes whether the Exchange Online direct endpoint accepts spoofed mail when MX routes through a third-party SEG | When MX is routed via a SEG (Proofpoint, Mimecast, etc.) but EXO's direct endpoint (`<domain>.mail.protection.outlook.com`) has no partner connector, attackers can bypass SPF/DKIM/DMARC entirely by delivering directly to EXO on port 25. |
-| **DMARC** | 3.5 | 0: missing / 3: none policy / 7: quarantine / 10: reject pct=100 | Checks DMARC policy (`reject`/`quarantine`/`none`), percentage sampling (`pct`), subdomain policy (`sp`), and reporting endpoints (`rua`/`ruf`) | Without `p=reject` at `pct=100`, receivers may still deliver spoofed emails. `p=none` only monitors -- it does not protect. Missing DMARC means no policy enforcement at all. |
-| **SPF** | 3.0 | 0: missing or +all / 3: neutral or unknown / 7: soft fail / 10: hard fail | Validates the Sender Policy Framework record and its `all` mechanism (`-all`, `~all`, `?all`, `+all`) | A missing or permissive SPF (`+all`, `~all`) lets attackers send emails on behalf of the domain. Hard fail (`-all`) is the only policy that tells receiving servers to reject unauthorized senders. |
-| **DKIM** | 2.5 | 0: missing / 3: weak key or l= tag / 7: test mode or guessable / 10: strong | Bruteforces DKIM selectors, checks key strength (RSA bits), detects guessable selectors and risky tags (`l=`, `t=y`) | Weak DKIM keys (<2048 bits) can be factored, allowing an attacker to sign forged emails. The `l=` tag lets attackers append content to signed messages. Test mode (`t=y`) means receivers may not enforce failures. |
-| **DNSSEC** | 1.5 | 0: missing / 3: DS without DNSKEY / 7: DNSKEY without DS / 10: both present | Checks for DS and DNSKEY records to validate the DNSSEC chain of trust | Without DNSSEC, DNS responses can be spoofed (cache poisoning). An attacker on the network path can redirect traffic by forging DNS answers. Requires specific network conditions. |
-| **CAA** | 1.5 | 0: missing / 3: no issue tag / 7: permissive issue / 10: restricted | Verifies Certificate Authority Authorization DNS records and the `issue`/`issuewild` tags | Without CAA, any CA can issue a certificate for the domain. An attacker who compromises a less-secure CA can obtain a valid TLS certificate and intercept traffic. |
-| **MX** | 1.0 | 0: missing / 3: null or IP literal / 7: single MX / 10: multiple MX | Validates mail exchangers, detects null MX (`.`) and IP-literal MX entries | A null MX or IP-literal MX breaks email delivery and may indicate misconfiguration. A single MX provides no redundancy -- if it goes down, all inbound email is lost. |
-| **NS** | 1.0 | 0: missing / 3: single NS / 7: same provider / 10: diverse providers | Checks nameserver count and provider diversity | A single nameserver or all nameservers on the same provider is a single point of failure. A DDoS or provider outage takes the entire domain offline. |
-| **TLSA** | 0.5 | 0: missing / 10: present | Queries TLSA records at `_25._tcp.<domain>` for DANE/SMTP authentication | DANE binds a TLS certificate to a domain via DNS, preventing CA compromise and man-in-the-middle attacks on SMTP connections. Without TLSA, STARTTLS can be silently stripped. |
-| **PTR** | 0.5 | 0: missing / 3: partial / 7: no match / 10: match | Resolves A records, performs reverse DNS lookups, and checks if PTR matches the domain | Many mail servers reject or flag emails from IPs without valid reverse DNS. A missing or mismatched PTR hurts deliverability and can indicate a compromised or rented host. |
-| **SRV** | 0.25 | 0: missing / 7: partial / 10: all present | Looks for mail-related SRV records (`_submission._tcp`, `_imaps._tcp`, `_pop3s._tcp`) | SRV records allow mail clients to auto-discover server endpoints securely. Their absence forces manual configuration and increases the risk of users connecting to rogue servers. |
-| **IPv6** | 0.25 | 0: missing / 10: present | Checks for AAAA records on the domain | Lack of IPv6 is not a direct security risk but indicates incomplete network readiness. Some networks and resolvers are IPv6-only; missing AAAA records can cause connectivity issues. |
+### Email Authentication & Policy
 
-For detailed definitions, ideal values, exploitation examples, and impact analysis, see [CHECKS.md](CHECKS.md).
+| Check | Weight | What it does |
+|---|---|---|
+| **GHOST** | 4.0 | Ghost Sender: probes EXO direct endpoint bypass when MX routes through third-party SEG |
+| **DMARC** | 3.5 | DMARC policy (reject/quarantine/none), pct, subdomain policy, reporting |
+| **SPF** | 3.0 | SPF record validation and `all` mechanism (-all, ~all, ?all, +all) |
+| **DKIM** | 2.5 | DKIM selector bruteforce, key strength (RSA bits), risky tags (l=, t=y) |
+| **MTA-STS** | 1.5 | MTA-STS TXT record + HTTPS policy (enforce/testing/none), MX patterns, max_age |
+| **SEG** | 1.5 | Email gateway fingerprinting (Proofpoint, Mimecast, Barracuda, IronPort, MS Defender, Google, 15+ providers) |
+| **DMARC-EXT** | 1.0 | DMARC external report authorization (RFC 7489 s7.1) - validates rua/ruf cross-domain auth |
+| **TLS-RPT** | 0.5 | SMTP TLS Reporting (RFC 8460) - rua presence |
+| **SPF-DEPTH** | 0.5 | SPF include chain recursion - DNS lookup count vs RFC 7208 10-lookup limit |
+| **SPF-RECON** | 0.5 | SPF infrastructure mapping - recursive include tree walking, ESP identification (25+ providers), broad IP range detection |
+| **BIMI** | 0.25 | BIMI brand indicator (v=BIMI1) - logo URL, VMC certificate |
+
+### DNS Infrastructure
+
+| Check | Weight | What it does |
+|---|---|---|
+| **AXFR** | 2.0 | Zone transfer test against each NS - full zone dump = critical exposure |
+| **DNSSEC** | 1.5 | DS + DNSKEY chain of trust validation |
+| **CAA** | 1.5 | Certificate Authority Authorization - issue/issuewild tags |
+| **NS** | 1.0 | Nameserver count and provider diversity |
+| **MX** | 1.0 | Mail exchangers, null MX, IP-literal detection |
+| **DNSBL** | 1.0 | IP reputation on 4 major blacklists (Spamhaus, SpamCop, Barracuda, SORBS) |
+| **SOA** | 0.5 | SOA record analysis - timers, admin contact, serial |
+| **WILDCARD** | 0.5 | Wildcard DNS detection (random subdomain resolution) |
+| **NSEC-WALK** | 1.5 | DNSSEC zone walking: NSEC chain enumeration, NSEC3 parameter analysis (algorithm, iterations, salt) |
+| **DNS-REBIND** | 1.0 | Private/reserved IP resolution detection (RFC 1918, loopback, link-local, CGNAT) - SSRF/rebinding risk |
+| **ZONE** | 0.5 | NS answer consistency - same query to all NS, compare answers |
+| **TLSA** | 0.5 | DANE/TLSA for SMTP (port 25) |
+| **PTR** | 0.5 | Reverse DNS match |
+| **CNAME** | 0.25 | CNAME on apex (RFC violation), chain length, CNAME+MX coexistence |
+| **SRV** | 0.25 | Mail SRV records (submission, imaps, pop3s) |
+| **IPv6** | 0.25 | AAAA record presence |
+
+### TLS / Certificates / Web
+
+| Check | Weight | What it does |
+|---|---|---|
+| **TLS** | 2.0 | Web TLS (port 443) + MX STARTTLS: cert chain, cipher, protocol version, deprecated TLS |
+| **CT** | 1.0 | Certificate Transparency via crt.sh - unexpected certs, wildcard abuse |
+| **HSTS** | 1.0 | HSTS header (max-age, includeSubDomains, preload) |
+| **HEADERS** | 1.0 | HTTP security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP) |
+| **REDIRECT** | 0.5 | HTTP -> HTTPS redirect analysis |
+| **COOKIE** | 0.5 | Set-Cookie flags (Secure, HttpOnly, SameSite) |
+| **SEC.TXT** | 0.25 | security.txt (RFC 9116) - Contact, Expires fields |
+
+### Recon / Attack Surface
+
+| Check | Weight | What it does |
+|---|---|---|
+| **DANGLING** | 3.0 | Subdomain takeover: dangling CNAMEs to deprovisioned services (31 fingerprints: AWS S3/EB/CF, Azure, GitHub, Heroku, Netlify, Vercel, Shopify...) |
+| **SUBDOMAINS** | 1.5 | crt.sh CT log enumeration, sensitive subdomain detection (dev, staging, admin, vpn) |
+| **M365** | 1.0 | Microsoft 365 tenant detection (OpenID config, autodiscover CNAME, SIP federation SRV) |
+| **AUTODISCOVER** | 1.0 | Autodiscover/autoconfig endpoint security (4 HTTP endpoints + SRV + CNAME), info leak detection |
+| **OPEN PORTS** | 1.0 | TCP scan on 18 ports, dangerous port flagging (FTP, telnet, SMB, RDP, DB), Shodan enrichment |
+| **SUB-BRUTE** | 1.0 | Dictionary subdomain enumeration (200+ prefixes), wildcard filtering, sensitive subdomain detection |
+| **WHOIS** | 0.5 | RDAP: domain expiry, registrar lock, transfer protection |
+| **RPKI** | 0.5 | Route Origin Authorization via Cloudflare RPKI API |
+
+### Intrusive (`--intrusive`)
+
+| Check | Weight | What it does |
+|---|---|---|
+| **SMTP-RECON** | 2.0 | SMTP reconnaissance: EHLO hostname analysis, AUTH method enumeration, NTLM info leak (AD domain, internal hostname, OS version), HELP probing |
+| **SMTP-SEC** | 2.0 | Per-MX: banner/version, STARTTLS enforcement, VRFY/EXPN user enum, open relay, SMTP smuggling (bare-LF injection) |
+| **BOUNCE** | 2.0 | Send to nonexistent recipient, detect accept-then-bounce (backscatter) vs reject-before-accept |
+| **SMTP-ENUM** | 1.5 | RCPT TO user enumeration against 30 common addresses, catch-all detection, differential response analysis |
+| **SMTP-STRIP** | 1.5 | SMTP TLS enforcement: plaintext delivery test, deprecated TLS (1.0/1.1) probing, STARTTLS cert hostname mismatch |
+| **NSEC-WALK** | 1.5 | DNSSEC zone walking via NSEC chain, NSEC3 parameter strength analysis |
+| **SUB-BRUTE** | 1.0 | Dictionary subdomain brute-force (200+ prefixes), wildcard detection, sensitive service exposure |
+| **NUCLEI** | 2.0 | Vulnerability scanning via ProjectDiscovery nuclei (auto-detected, critical/high/medium severity) |
+| **KATANA** | 0.5 | Web surface discovery via ProjectDiscovery katana (sensitive paths, forms, JS files) |
 
 ## Weight Rationale
 
-Weights reflect **attacker exploitability** -- how much damage results from exploiting the absence of each control:
+Weights reflect **attacker exploitability** - how much damage results from exploiting the absence of each control:
 
-- **Critical (4.0)**: Ghost Sender -- full email auth bypass, instant spoofing with zero defenses
-- **High (3.0-3.5)**: DMARC, SPF -- direct email spoofing, no enforcement or no sender verification
-- **Significant (2.5)**: DKIM -- forge signed emails (weak keys) or bypass DMARC alignment
-- **Moderate (1.5)**: DNSSEC, CAA -- DNS hijacking, unauthorized certificates, requires specific conditions
-- **Low (1.0)**: MX, NS -- availability attacks, infrastructure mapping, indirect exploitation
-- **Minimal (0.25-0.5)**: TLSA, PTR, SRV, IPv6 -- transport interception, reconnaissance, no direct exploitation
+- **Critical (3.0-4.0)**: Ghost Sender (full auth bypass), Dangling CNAME (subdomain takeover = full control)
+- **High (2.0-3.5)**: DMARC, SPF, DKIM, AXFR (zone dump), TLS (MITM), SMTP-SEC (relay/smuggling), SMTP-RECON (NTLM info leak/AD recon), Nuclei (vuln scanner), Bounce (backscatter)
+- **Significant (1.0-1.5)**: DNSSEC, CAA, MTA-STS, SEG, Subdomains, M365, Autodiscover, SMTP-ENUM (user enumeration), SMTP-STRIP (TLS downgrade), NSEC-WALK (zone walking), CT, HSTS, Headers, DNSBL, Open Ports, DNS-REBIND, Sub-Brute, NS, MX
+- **Low (0.5)**: SOA, Wildcard, Zone consistency, TLS-RPT, WHOIS, Redirect, Cookie, SPF-Depth, SPF-Recon, RPKI, TLSA, PTR, Katana
+- **Minimal (0.25)**: CNAME, BIMI, Security.txt, SRV, IPv6
 
 ## Modes
 
@@ -99,14 +159,19 @@ mercure_-_domain_security/
       dkim_selectors.txt          # DKIM selector wordlist (5300+ selectors)
    mercure/
       __init__.py
-      cli.py                      # CLI entry point, banner, mode dispatch
-      config.py                   # Configuration management (.env support)
+      cli.py                      # CLI argument parsing and mode dispatch
+      config.py                   # Lazy-loaded configuration (.env support)
       logger.py                   # Rich console logging with file persistence
-      dns_utils.py                # DNS query wrapper functions
-      scoring.py                  # CheckResult dataclass, scoring logic, weights
-      spoof.py                    # Email spoofing engine (9 methods, SMTP relay support)
+      dns_utils.py                # DNS queries with cache, typed errors, AXFR, DNSBL
+      http_utils.py               # HTTP fetch, TLS cert analysis, SMTP STARTTLS probe
+      recon.py                    # External sources (crt.sh, Shodan InternetDB, RDAP)
+      scoring.py                  # CheckResult dataclass, scoring logic, 39 weights
+      runner.py                   # Orchestration (domain analysis, file batch, spoof)
+      output.py                   # Rendering (banner, tables, JSON/CSV export)
+      smtp.py                     # Generic SMTP delivery (direct, relay, amplification)
+      spoof.py                    # Email spoofing engine (12 methods, parallel execution)
       checks/
-         __init__.py              # Check registry
+         __init__.py              # Auto-discovery check registry
          base.py                  # BaseCheck abstract class
          spf.py                   # SPF validation
          dkim.py                  # DKIM key strength and selector discovery
@@ -120,9 +185,32 @@ mercure_-_domain_security/
          srv.py                   # Mail SRV records
          tlsa.py                  # DANE/TLSA for SMTP
          ghost.py                 # Ghost Sender (EXO direct endpoint spoofing)
+         smtp_recon.py            # SMTP recon (NTLM info leak, AUTH enum, EHLO analysis)
+         smtp_enum.py             # RCPT TO user enumeration
+         smtp_tls_strip.py        # SMTP TLS enforcement and downgrade testing
+         nsec_walk.py             # DNSSEC NSEC/NSEC3 zone walking
+         dns_rebind.py            # Private IP resolution detection
+         subdomain_brute.py       # Dictionary subdomain enumeration
+         autodiscover.py          # Autodiscover/autoconfig endpoint security
+         spf_recon.py             # SPF infrastructure mapping
+         nuclei_scan.py           # Nuclei vulnerability scanner integration
+         katana_scan.py           # Katana web crawler integration
       dkim_selectors/
          __init__.py
          builder.py               # DKIM selector generation and expansion
+   tests/
+      conftest.py                 # Shared fixtures (config reset, DNS mocks, SMTP mocks)
+      test_config.py              # Config and lazy proxy tests
+      test_dns_utils.py           # DNS cache, resolve, DnsResult tests
+      test_scoring.py             # Score mapping, weighted scoring, style tests
+      test_spf.py                 # SPF detection and evaluation tests
+      test_dkim.py                # DKIM key parsing, selector bruteforce tests
+      test_dmarc.py               # DMARC parsing and policy evaluation tests
+      test_ghost.py               # Ghost Sender detection tests
+      test_ptr.py                 # PTR matching and check tests
+      test_ns.py                  # Nameserver diversity check tests
+      test_smtp.py                # SMTP delivery (direct, relay, amplification) tests
+      test_spoof.py               # Spoof engine method and parallel execution tests
 ```
 
 ## Installation
@@ -149,6 +237,8 @@ python mercure.py -h
 | `--dkim-wordlist PATH` | Custom DKIM selector wordlist (default: `resources/dkim_selectors.txt`, 5300+ selectors) |
 | `--no-bruteforce` | Disable DKIM selector bruteforce |
 | `--aggressive` | Enable aggressive DKIM selector bruteforce |
+| `--intrusive` | Enable intrusive checks (SMTP probing, bounce analysis, port scan) |
+| `--skip-external` | Skip checks that call external APIs (crt.sh, Shodan, RDAP) |
 | `--threads N` | Worker threads for file mode (default 16) |
 | `--selector-threads N` | Threads for DKIM selector bruteforce (default 16) |
 | `--format FMT` | Output format: text, json, csv (default text) |
@@ -160,6 +250,7 @@ python mercure.py -h
 |---|---|
 | `-d, --domain` | Domain to spoof as (sender = mercure@domain) |
 | `-r, --recipient` | Recipient email address |
+| `--no-parallel` | Run spoofing methods sequentially (default: parallel with 6 workers) |
 | `--format FMT` | Output format: text, json (default text) |
 | `--output PATH` | Output file path |
 
